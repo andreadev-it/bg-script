@@ -12,7 +12,7 @@ In your background script, you must create a BackgroundHandler class and pass it
 // background.js
 
 function remoteFunction() {
-  console.log("Executed remotely");
+  return "Executed remotely";
 }
 
 let bgHandler = new BackgroundHandler({
