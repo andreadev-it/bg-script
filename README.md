@@ -8,7 +8,8 @@ This project was inspired by comlink, and it started out as a way for me to bett
 ## How does it work?
 
 In your background script, you must create a BackgroundHandler class and pass it an object that contains the property and methods that you want to share:
-```
+
+```js
 // background.js
 
 function remoteFunction() {
@@ -22,7 +23,8 @@ let bgHandler = new BackgroundHandler({
 ```
 
 In your content script, you should create a BackgroundScript class and then use it in this way:
-```
+
+```js
 var bgScript = new BackgroundScript();
 
 async function foo() {
@@ -34,3 +36,32 @@ async function foo() {
    
 }
 ```
+
+## Installation
+
+Download the `bgscript.js` file and include it in your chrome extension in the following two ways.
+
+In order to use it in your content scripts, include it in your manifest.json as the first content script:
+
+```
+"content_scripts": [{
+  "js": ["bgscript.js", "my-content-script.js", ...]
+}]
+```
+
+Similarly, you need to declare it as first script in the "background scripts" section of your manifest file:
+
+```
+"background": {
+  "scripts": [ "bgscript.js", "my-background-script.js"]
+}
+```
+
+When you do this, the two classes will be automatically available in your scripts.
+
+If you're building an html page for your extension, just add the following tag to the head of your page, before any other script.
+```html
+<script src='bgscript.js'></script>
+```
+
+Of course, the background script location might be different in your project.

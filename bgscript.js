@@ -1,5 +1,6 @@
 // This must be used in the content script (or extension page script)
 
+// Class that is used internally to emulate the chrome "onMessage" event handling for further user customization
 class BSEvent {
     listeners = []
 
@@ -14,9 +15,9 @@ class BSEvent {
         }
     }
 
-    trigger(details) {
-        for (f of this.listeners) {
-            f(details);
+    trigger(...details) {
+        for (let f of this.listeners) {
+            f(...details);
         }
     }
 }
@@ -35,7 +36,7 @@ class BackgroundScript {
 
     // Starts the event listener on message
     init() {
-        chrome.runtime.onMessage.addListener((message) => {
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // If the message is an object, and has a "type" property, the it may be for our internal use
             if (this.isScriptMessage(message)) {
                 
@@ -51,7 +52,7 @@ class BackgroundScript {
             }
 
             // If it's not for our use, than redirect it to the user handler
-            this.onMessage.trigger(message);
+            this.onMessage.trigger(message, sender, sendResponse);
         });
     }
 
@@ -100,7 +101,8 @@ class BackgroundScript {
                     let request = {
                         type: "call",
                         name: property,
-                        args: args
+                        args: args,
+                        signature: this.signature
                     }
 
                     chrome.runtime.sendMessage(request, (response) => {
@@ -138,6 +140,7 @@ class BackgroundScript {
         });
     }
 
+    // Check if the message received is coming from the bgscript library
     isScriptMessage(message) {
         if (typeof(message) === "object" && "signature" in message && message.signature == this.signature)
             return true;
@@ -146,6 +149,9 @@ class BackgroundScript {
 
     _sendMessage(request, resolve, reject) {
         try {
+            if (this.signature)
+                request.signature = this.signature;
+
             chrome.runtime.sendMessage(request, resolve);
         }
         catch (err) {
@@ -166,7 +172,8 @@ class BackgroundHandler {
     sharedMethods = {}
     sharedProps = {}
     currentCallId = 1
-    signature = null;
+    signature = null
+    onMessage = new BSEvent()
 
     constructor(sharedData) {
         // Split the shared data between functions and properties, for easier access
@@ -184,13 +191,18 @@ class BackgroundHandler {
 
     // Initialization function, adds the message listener
     init() {
-
+        // Create a signature to help identify library messages
         this.signature = this._uuidv4();
 
         // Add listener for incoming messages
         chrome.runtime.onMessage.addListener(
             (request, sender, sendResponse) => {
-                sendResponse( this.handleRequest(request, sender) );
+                if (this.isScriptMessage(request)) {
+                    sendResponse( this.handleRequest(request, sender) );
+                }
+                else {
+                    this.onMessage.trigger(request, sender, sendResponse);
+                }
             }
         );
     }
@@ -252,6 +264,15 @@ class BackgroundHandler {
             id,
             error
         });
+    }
+
+    // Check if the message received is coming from the bgscript library
+    isScriptMessage(message) {
+        if (typeof(message) === "object") {
+            if (message.type === "bootstrap") return true;
+            if (message.signature == this.signature) return true;
+        }
+        return false;
     }
 
     _promisify(func, args) {
