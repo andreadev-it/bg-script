@@ -64,4 +64,161 @@ If you're building an html page for your extension, just add the following tag t
 <script src='bgscript.js'></script>
 ```
 
-Of course, the background script location might be different in your project.
+## How to use it
+
+### Get a variable from the background script
+
+Background script:
+```js
+let shared = {
+  variable: 10
+}
+
+// This function shows how to use shared variables within the script to avoid problems with object references
+function setVariable(val) {
+  shared.variable = val;
+}
+
+// Initialize the Background script handler passing the object to be shared
+let bgHandler = new BackgroundHandler(shared);
+```
+
+Content script:
+```js
+// Initialize the background script object
+let bgScript = new BackgroundScript();
+
+async function foo() {
+  // Get a connection to the background script
+  let connection = await bgScript.getConnection();
+
+  // Get the variable from the background script
+  let variable = await connection.variable;
+
+  console.log(variable);
+}
+
+foo();
+```
+
+### Execute a method from the background script
+
+Background script:
+```js
+var variable = null;
+
+function setVariable(val) {
+  variable = val;
+}
+
+function showVariable() {
+  return variable;
+}
+
+let shared = {
+  setVariable,
+  showVariable
+}
+
+// Initialize the Background script handler passing the object to be shared
+let bgHandler = new BackgroundHandler(shared);
+```
+
+Content Script:
+```js
+let bgScript = new BackgroundScript();
+
+async function foo() {
+  let connection = await bgScript.getConnection();
+
+  await connection.setVariable("Hello world");
+
+  let variable = await connection.showVariable();
+
+  console.log(variable);
+}
+
+foo();
+```
+
+### Shortcut for setting a shared variable
+
+Instead of creating a setter function and using it like I showed in the examples above, if the variable you want to change is shared, you can do it this way:
+
+Background script:
+```js
+
+let shared = {
+  variable: null
+}
+
+let bgHandler = new BackgroundHandler(shared);
+```
+
+Content script:
+```js
+let bgScript = new BackgroundScript();
+
+async function foo() {
+  let connection = await bgScript.getConnection();
+
+  // Set the variable. The brackets are there to avoid syntax errors.
+  await (connection.variable = "Hello world");
+
+  // Show the new variable value
+  console.log(await connection.variable);
+}
+```
+
+Note that when you set a variable, the new result will be returned (just like when you set a normal variable). This means that doing it this way will give you the same result as before:
+```js
+  ...
+  // Set the variable and log its new value
+  console.log(await (connection.variable = "Hello world"));
+  ...
+```
+
+## Using the sendMessage API alongside this library
+
+Sometimes it could still be useful to have access to the sendMessage API directly. That is, for example, if you need to notify a content script about something that happened in the background script. In that situation, you can use the sendMessage API to send information in this way:
+
+Background script:
+```js
+chrome.tabs.sendMessage(tabId, "Custom message text", (response) => {
+  // Handle the response
+});
+```
+
+Content script:
+```js
+let bgScript = new BackgroundScript();
+
+bgScript.onMessage.addListener( (request, sender, sendResponse) => {
+  // ...
+  sendResponse("Reponse from the content script");
+});
+```
+
+This is very similar to the original `sendMessage` API, but you won't listen directly to the `chrome.runtime.onMessage` event, instead you will listen to the `bgScript.onMessage` event, which will remove all the messages sent and received from the library for its internal use.
+
+Sending a message from the content script is very similar:
+
+Background script:
+```js
+let shared = {};
+
+let bgHandler = new BackgroundHandler(shared);
+
+bgHandler.onMessage.addListener( (message, sender, sendResponse) => {
+  // Handle the message
+});
+```
+
+Content script:
+```js
+chrome.runtime.sendMessage("Custom message from the content script", (response) => {
+  // Handle the response
+});
+```
+
+**Important**: You can send to the background script any kind of messages, but there is one thing to keep in mind: if the message is an object, it **must not** have a `type` property with a value of `"bootstrap"`.
