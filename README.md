@@ -1,13 +1,13 @@
 # bg-script - Library for chrome extension communication
-This library will help you communicate between your content scripts and the background script, offering an alternative to the default `sendMessage` API. The
-problem with the original API is that it is not very easy to use in different parts of your code, and doesn't allow you to easily get response for asynchronous
+This library will help you communicate between your content scripts and the background script, offering an alternative to the default `sendMessage` API.
+The chrome API that do this is not very practical in the way it's layed out, and doesn't allow you to easily get response for asynchronous
 actions.
 
-This project was inspired by comlink, and it started out as a way for me to better understand Javascript Proxies.
+This project was inspired by [comlink](https://github.com/GoogleChromeLabs/comlink), and it started out as a way for me to better understand Javascript Proxies.
 
 ## How does it work?
 
-In your background script, you must create a BackgroundHandler class and pass it an object that contains the property and methods that you want to share:
+In your background script, you must create a BackgroundHandler class and pass it an object that contains the properties and methods you want to share:
 
 ```js
 // background.js
@@ -19,22 +19,25 @@ function remoteFunction() {
 let bgHandler = new BackgroundHandler({
   remoteFunction // This is a shorthand for `remoteFunction: remoteFunction`
 });
-
 ```
 
-In your content script, you should create a BackgroundScript class and then use it in this way:
+In your content script, you should create a BackgroundScript class and then use it like this:
 
 ```js
 var bgScript = new BackgroundScript();
 
+// Use an async function for better code!
 async function foo() {
    // Get a reference to the background script connection (which is a proxy)
    let connection = await bgScript.getConnection();
    
-   let result = await bgScript.remoteFunction();
+   let result = await connection.remoteFunction();
+
    console.log(result); // --> "Executed remotely"
-   
 }
+
+// Execute the function when needed
+foo();
 ```
 
 ## Installation
@@ -49,7 +52,7 @@ In order to use it in your content scripts, include it in your manifest.json as 
 }]
 ```
 
-Similarly, you need to declare it as first script in the "background scripts" section of your manifest file:
+Similarly, for the background, you need to declare it as first script in the "background scripts" section of your manifest file:
 
 ```
 "background": {
@@ -60,6 +63,7 @@ Similarly, you need to declare it as first script in the "background scripts" se
 When you do this, the two classes will be automatically available in your scripts.
 
 If you're building an html page for your extension, just add the following tag to the head of your page, before any other script.
+
 ```html
 <script src='bgscript.js'></script>
 ```
@@ -84,6 +88,7 @@ let bgHandler = new BackgroundHandler(shared);
 ```
 
 Content script:
+
 ```js
 // Initialize the background script object
 let bgScript = new BackgroundScript();
@@ -147,7 +152,6 @@ Instead of creating a setter function and using it like I showed in the examples
 
 Background script:
 ```js
-
 let shared = {
   variable: null
 }
@@ -168,9 +172,11 @@ async function foo() {
   // Show the new variable value
   console.log(await connection.variable);
 }
+
+foo();
 ```
 
-Note that when you set a variable, the new result will be returned (just like when you set a normal variable). This means that doing it this way will give you the same result as before:
+Note that when you set a variable, the new value will be returned (just like when you set a normal variable). This means that doing it this way will give you the same result as before:
 ```js
   ...
   // Set the variable and log its new value
