@@ -22,7 +22,7 @@ class BSEvent {
     }
 }
 
-class BackgroundScript {
+export class BackgroundScript {
     
     proxy = null
     methods = []
@@ -167,7 +167,7 @@ class BackgroundScript {
 
 // This must be used in the background script
 
-class BackgroundHandler {
+export class BackgroundHandler {
 
     sharedMethods = {}
     sharedProps = {}
@@ -301,3 +301,8 @@ class BackgroundHandler {
         });
     }
 }
+
+export default {
+    BackgroundScript,
+    BackgroundHandler
+};
