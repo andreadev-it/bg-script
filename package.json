@@ -1,0 +1,25 @@
+{
+  "name": "@andreadev/bg-script",
+  "version": "1.0.0",
+  "description": "Library that helps you communicate between background and content scripts in a Google Chrome extension.",
+  "main": "bgscript.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andreadev-it/bg-script.git"
+  },
+  "keywords": [
+    "extension",
+    "sendMessage",
+    "google",
+    "chrome"
+  ],
+  "author": "Andrea Dragotta",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/andreadev-it/bg-script/issues"
+  },
+  "homepage": "https://github.com/andreadev-it/bg-script#readme"
+}
