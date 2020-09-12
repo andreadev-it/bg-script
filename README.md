@@ -1,4 +1,7 @@
 # bg-script - Library for chrome extension communication
+![npm (scoped)](https://img.shields.io/npm/v/@andreadev/bg-script)
+![chrome: 55+](https://img.shields.io/badge/chrome%20version-55%2B-orange)
+
 This library will help you communicate between your content scripts and the background script, offering an alternative to the default `sendMessage` API.
 The chrome API that do this is not very practical in the way it's layed out, and doesn't allow you to easily get response for asynchronous
 actions.
