@@ -24,13 +24,13 @@ class BSEvent {
 
 class BackgroundScript {
     
-    proxy = null
-    methods = []
-    signature = null
-    onMessage = new BSEvent()
-    waitingCalls = new Map()
-
     constructor() {
+        this.proxy = null
+        this.methods = []
+        this.signature = null
+        this.onMessage = new BSEvent()
+        this.waitingCalls = new Map()
+
         this.init();
     }
 
@@ -169,13 +169,14 @@ class BackgroundScript {
 
 class BackgroundHandler {
 
-    sharedMethods = {}
-    sharedProps = {}
-    currentCallId = 1
-    signature = null
-    onMessage = new BSEvent()
-
     constructor(sharedData) {
+
+        this.sharedMethods = {};
+        this.sharedProps = {};
+        this.currentCallId = 1;
+        this.signature = null;
+        this.onMessage = new BSEvent();
+
         // Split the shared data between functions and properties, for easier access
         for (let [key, value] of Object.entries(sharedData)) {
             if (typeof value === "function") {
