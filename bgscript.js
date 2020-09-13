@@ -2,7 +2,10 @@
 
 // Class that is used internally to emulate the chrome "onMessage" event handling for further user customization
 class BSEvent {
-    listeners = []
+    
+    constructor() {
+        this.listeners = []
+    }
 
     addListener(f) {
         this.listeners.push(f);
