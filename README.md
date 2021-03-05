@@ -79,7 +79,9 @@ async function callScriptMethod(tabId) {
 
 ## Installation
 
-Download the `bgscript.js` file and include it in your chrome extension in the following two ways.
+### Without bundler
+
+Download the `build/bgscript.js` file and include it in your chrome extension in the following two ways.
 
 In order to use it in your content scripts, include it in your manifest.json as the first content script:
 
@@ -103,6 +105,22 @@ If you're building an html page for your extension, just add the following tag t
 
 ```html
 <script src='bgscript.js'></script>
+```
+
+### With bundler
+
+If you use a bundler, you can install the npm package:
+```
+npm install --save @andreadev/bg-script
+```
+
+Then, in your code, you can just import the class that you want to use:
+```js
+// Background script
+import { BackgroundHandler } from '@andreadev/bg-script';
+
+// Content script
+import { BackgroundScript } from '@andreadev/bg-script';
 ```
 
 ## How to use it
