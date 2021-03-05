@@ -46,7 +46,7 @@ class BackgroundHandler {
         // In the background script, there is no tab-id associated
         let connectionOptions = { hasTabId: false };
 
-        let connection = new Connection(port, exposedData, connectionOptions);
+        let connection = new Connection(port, this.exposedData, connectionOptions);
 
         connection.addListener("disconnect", () => this.disconnectScript(scriptId) );
 

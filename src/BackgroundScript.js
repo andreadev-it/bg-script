@@ -21,11 +21,11 @@ class BackgroundScript {
      *                                     "devtools" - To be used in scripts that run from the devtools.
      *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
      */
-    constructor(scriptId, exposedData = {}, options = { context = "content" }) {
+    constructor(scriptId, exposedData = {}, options = { context: "content" }) {
         this.scriptId = scriptId ?? this._uuidv4();
         this.connection = null;
         this.exposedData = exposedData;
-        this.context = context;
+        this.context = options.context ?? "content";
 
         this.connectBackgroundScript();
     }
@@ -56,7 +56,7 @@ class BackgroundScript {
             }
         );
 
-        this.connection = new Connection(port, this.exposedData, options);
+        this.connection = new Connection(port, this.exposedData);
         
         this.connection.addListener("disconnect", () => {
             this.connection = null;
