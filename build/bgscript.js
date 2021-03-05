@@ -386,7 +386,6 @@ class Connection extends _CustomEventTarget.default {
 
 
   handleMessage(message) {
-    console.log("Received message: ", message);
     let response = this.handleMessageTypes(message); // I need to check if response is not null, because a message of type "call" should not have an immediate answer
 
     if (response) {
