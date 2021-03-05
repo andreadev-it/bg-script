@@ -10,6 +10,8 @@ This project was inspired by [comlink](https://github.com/GoogleChromeLabs/comli
 
 ## How does it work?
 
+### Access background script methods from content script
+
 In your background script, you must create a BackgroundHandler class and pass it an object that contains the properties and methods you want to share:
 
 ```js
@@ -27,7 +29,7 @@ let bgHandler = new BackgroundHandler({
 In your content script, you should create a BackgroundScript class and then use it like this:
 
 ```js
-var bgScript = new BackgroundScript();
+var bgScript = new BackgroundScript("script-id");
 
 // Use an async function for better code!
 async function foo() {
@@ -41,6 +43,38 @@ async function foo() {
 
 // Execute the function when needed
 foo();
+```
+
+### Acess content scripts methods from the background script
+
+You can call methods exposed from the content script in a similar way:
+
+```js
+// Content Script file
+
+function contentScriptMethod() {
+  return "Executed in the content script";
+}
+
+var bgScript = new BackgroundScript("my-script" , {
+  contentScriptMethod
+});
+```
+
+If you have the tabId where the script resides, you can call its methods like this:
+```js
+// Background script file
+
+var bgHandler = new BackgroundHandler();
+
+async function callScriptMethod(tabId) {
+  let connection = await bgHandler.getScriptConnection("my-script", tabId);
+
+  let result = await connection.contentScriptMethod();
+
+  console.log(result); // --> Executed in the content script;
+}
+
 ```
 
 ## Installation
@@ -187,47 +221,93 @@ Note that when you set a variable, the new value will be returned (just like whe
   ...
 ```
 
+## Communicate with the content scripts
+From version 1.1.0, you can do all the aforementioned actions from the background script too!
+
+By default, the scripts are associated with their tab ids. For this reason, you should first know which tab you want to communicate with. If you have this tab id in a variable called "tabId", then you can do the following:
+
+```js
+// Background script
+var bgHandler = new BackgroundHandler();
+
+// ...
+
+async function callContentScript(tabId) {
+  let connection = await bgHandler.getScriptConnection("script-id", tabId);
+  await connection.remoteMethod(); // This method resides in the content script.
+}
+```
+
+The first variable for the `getScriptConnection` method is the script ID. This must be set in the content script when a new `BackgroundScript` class is created:
+
+```js
+// Content script
+
+var bgScript = new BackgroundScript("script-id", {
+  remoteMethod
+});
+
+function remoteMethod() {
+  return "Method in the content script";
+}
+```
+
+## API Reference
+
+### BackgroundHandler class
+
+Class creation:
+```js
+var bgHandler = new BackgroundHandler( [exposed-data], [options] );
+```
+
+Parameters:
+| Parameter | Description |
+| --------- | ----------- |
+| [exposed-data] | **Object** (optional) - An object containing all the properties and methods that will be exposed to the content scripts. This are the limitations: do not put a property (or method) called "then" or "$getMyTabId", because they will be rejected. Also, if you expose a property, it must be JSON-friendly to be correctly received by other scripts. All exposed methods should also return JSON-friendly values in order to work correctly. | 
+| [options] | **Object** (optional) - An object that will enable further customization. Currently not used in this class.
+
+### BackgroundScript class
+
+**Class creation:**
+```js
+var bgScript = new BackgroundScript( [script-id], [exposed-data], [options] );
+```
+
+Parameters:
+
+| Parameter | Description |
+| --------- | ----------- |
+| [script-id] | **String** (optional) - A unique ID for this script. By default, this id will be tab-specific, so that you can have multiple tabs with the same script using the same script id. If omitted, a unique id will be generated |
+| [exposed-data] | **Object** (optional) - An object containing all the properties and methods that will be exposed to the Background script. You can put almost everything here, but just avoid to insert a "then" method, because it will be ignored. Also remember that if you want to directly get a remote property, it must be JSON-friendly, so don't insert properties that cannot be converted to JSON. |
+| [options] | **Object** (optional) - An object with some options to customize how the script work |
+| [options.context] | **String** - One of "content" (default), "devtools" and "tab-agnostic". If the value is "content", the script id will be associated with the current tab id. If you want to use this library from a devtools script, then you must set this option to "devtools" to automatically associate the script id with the inspected tab id. If the value is "tab-agnostic" the script id won't be associated to any tab id, so you won't be able to create another connection with the same script id. |
+
+### Connection proxy
+
+Get a connection to the background script:
+```js
+// Content script
+let bgScript = new BackgroundScript("script-id");
+//...
+let connection = await bgScript.getConnection();
+```
+
+Get a connection to a content script:
+```js
+// Background script
+let bgHandler = new BackgroundHandler();
+// ...
+let connection = await bgHandler.getScriptConnection("script-id", tabId);
+```
+
+Also, if you're in a content script, you can retrieve your tabId by calling this method:
+```js
+let connection = await bgScript.getConnection();
+
+let tabId = await connection.$getMyTabId();
+```
+
 ## Using the sendMessage API alongside this library
 
-Sometimes it could still be useful to have access to the sendMessage API directly. That is, for example, if you need to notify a content script about something that happened in the background script. In that situation, you can use the sendMessage API to send information in this way:
-
-Background script:
-```js
-chrome.tabs.sendMessage(tabId, "Custom message text", (response) => {
-  // Handle the response
-});
-```
-
-Content script:
-```js
-let bgScript = new BackgroundScript();
-
-bgScript.onMessage.addListener( (request, sender, sendResponse) => {
-  // ...
-  sendResponse("Reponse from the content script");
-});
-```
-
-This is very similar to the original `sendMessage` API, but you won't listen directly to the `chrome.runtime.onMessage` event, instead you will listen to the `bgScript.onMessage` event, which will remove all the messages sent and received from the library for its internal use.
-
-Sending a message from the content script is very similar:
-
-Background script:
-```js
-let shared = {};
-
-let bgHandler = new BackgroundHandler(shared);
-
-bgHandler.onMessage.addListener( (message, sender, sendResponse) => {
-  // Handle the message
-});
-```
-
-Content script:
-```js
-chrome.runtime.sendMessage("Custom message from the content script", (response) => {
-  // Handle the response
-});
-```
-
-**Important**: You can send to the background script any kind of messages, but there is one thing to keep in mind: if the message is an object, it **must not** have a `type` property with a value of `"bootstrap"`.
+From version 1.1.0, there is no limitation on how to use the "sendMessage" API, since this library is now using long lived connections with ports. If you want to create a separate port to the background script, just avoid to start its name with "bgscript", to ensure that the bgscript library does not mistake it as its private connection.
