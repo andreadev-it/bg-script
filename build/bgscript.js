@@ -345,7 +345,6 @@ class Connection extends _CustomEventTarget.default {
     this.parseExposedData(exposedData);
     this.port.onMessage.addListener(message => this.handleMessage(message));
     this.port.onDisconnect.addListener(() => {
-      console.log("Port disconnected!");
       this.fireEvent("disconnect");
     });
   }
