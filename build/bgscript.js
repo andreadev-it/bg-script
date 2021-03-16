@@ -21,11 +21,14 @@ exports.default = void 0;
 
 var _Connection = require("./Connection.js");
 
+var _Errors = require("./Errors");
+
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
  * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
+ * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
 class BackgroundHandler {
   /**
@@ -35,9 +38,12 @@ class BackgroundHandler {
    * @param {object} options Currently unused. An object that will customize how this class works.
    */
   constructor(exposedData = {}, options = {}) {
+    var _options$errorCallbac;
+
     this.scriptConnections = new Map(); // script-id --> connection
 
     this.exposedData = exposedData;
+    this.errorCallback = (_options$errorCallbac = options.errorCallback) !== null && _options$errorCallbac !== void 0 ? _options$errorCallbac : null;
     chrome.runtime.onConnect.addListener(port => this.handleNewConnection(port));
   }
   /**
@@ -59,7 +65,7 @@ class BackgroundHandler {
       scriptId += `-${tabId}`;
     }
 
-    if (this.scriptConnections.get(scriptId)) throw "The id has already been taken. It must be unique."; // In the background script, there is no tab-id associated
+    if (this.scriptConnections.get(scriptId)) return this.handleError(_Errors.BgHandlerErrors.ID_TAKEN, scriptId); // In the background script, there is no tab-id associated
 
     let connectionOptions = {
       hasTabId: false
@@ -114,12 +120,32 @@ class BackgroundHandler {
     let connection = this.scriptConnections.get(specificScriptId);
 
     if (!connection) {
-      console.error(`There is no connection assigned to id '${scriptId}'${tabId ? ` connected to the tab ${tabId}` : ''}.`);
+      this.handleError(_Errors.BgHandlerErrors.NO_CONNECTION, scriptId, tabId);
       return null;
     }
 
     let proxy = await connection.getProxy();
     return proxy;
+  }
+  /**
+   * Handle the errors thrown within the class
+   * 
+   * @param {Error} error 
+   * @param  {...any} args 
+   * @returns 
+   */
+
+
+  handleError(error, ...args) {
+    if (this.errorCallback) {
+      this.errorCallback({
+        errorId: error.id,
+        error: error.getText(...args)
+      });
+      return;
+    }
+
+    console.error(error.getText(...args));
   }
 
 }
@@ -127,7 +153,7 @@ class BackgroundHandler {
 var _default = BackgroundHandler;
 exports.default = _default;
 
-},{"./Connection.js":4}],3:[function(require,module,exports){
+},{"./Connection.js":4,"./Errors":6}],3:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -728,5 +754,46 @@ class CustomEventTarget {
 
 var _default = CustomEventTarget;
 exports.default = _default;
+
+},{}],6:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.BgHandlerErrors = exports.Error = void 0;
+
+class Error {
+  /**
+   * Creates a new Error with a specific id and a function that will return useful informations
+   * 
+   * @constructor
+   * @param {string} id A readable id for the error
+   * @param {function} getTextCallback A function that will return a description text for this error.
+   */
+  constructor(id, getTextCallback) {
+    this.id = id;
+    this.getTextCallback = getTextCallback;
+  }
+  /**
+   * Get the error description text
+   * 
+   * @param  {...any} args
+   * @returns {string} The description of this error 
+   */
+
+
+  getText(...args) {
+    return this.getTextCallback(...args);
+  }
+
+}
+
+exports.Error = Error;
+const BgHandlerErrors = {
+  ID_TAKEN: new Error('ID_TAKEN', id => `The id '${id}' has already been taken. It must be unique.`),
+  NO_CONNECTION: new Error('NO_CONNECTION', (scriptId, tabId) => `There is no connection assigned to id '${scriptId}'${tabId ? ` connected to the tab ${tabId}` : ''}.`)
+};
+exports.BgHandlerErrors = BgHandlerErrors;
 
 },{}]},{},[1]);

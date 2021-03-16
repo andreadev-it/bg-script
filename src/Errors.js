@@ -24,6 +24,6 @@ export class Error {
 }
 
 export const BgHandlerErrors = {
-    ID_TAKEN = new Error('ID_TAKEN', (id) => `The id '${id}' has already been taken. It must be unique.` ),
-    NO_CONNECTION = new Error('NO_CONNECTION', (scriptId, tabId) => `There is no connection assigned to id '${scriptId}'${(tabId) ? ` connected to the tab ${tabId}` : ''}.`)
+    ID_TAKEN: new Error('ID_TAKEN', (id) => `The id '${id}' has already been taken. It must be unique.` ),
+    NO_CONNECTION: new Error('NO_CONNECTION', (scriptId, tabId) => `There is no connection assigned to id '${scriptId}'${(tabId) ? ` connected to the tab ${tabId}` : ''}.`)
 };
