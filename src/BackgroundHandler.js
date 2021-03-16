@@ -1,10 +1,12 @@
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
+import { BgHandlerErrors as ERRORS, Error } from './Errors';
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
  * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
+ * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
 class BackgroundHandler {
 
@@ -17,6 +19,7 @@ class BackgroundHandler {
     constructor(exposedData = {}, options = {}) {
         this.scriptConnections = new Map(); // script-id --> connection
         this.exposedData = exposedData;
+        this.errorCallback = options.errorCallback ?? null;
 
         chrome.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
     }
@@ -41,7 +44,7 @@ class BackgroundHandler {
             scriptId += `-${tabId}`;
         }
 
-        if (this.scriptConnections.get(scriptId)) throw "The id has already been taken. It must be unique.";
+        if (this.scriptConnections.get(scriptId)) return this.handleError(ERRORS.ID_TAKEN, scriptId);
 
         // In the background script, there is no tab-id associated
         let connectionOptions = { hasTabId: false };
@@ -98,13 +101,32 @@ class BackgroundHandler {
         let connection = this.scriptConnections.get(specificScriptId);
 
         if (!connection) {
-            console.error(`There is no connection assigned to id '${scriptId}'${(tabId) ? ` connected to the tab ${tabId}` : ''}.`);
+            this.handleError(ERRORS.NO_CONNECTION, scriptId, tabId);
             return null;
         }
 
         let proxy = await connection.getProxy();
 
         return proxy;
+    }
+    /**
+     * Handle the errors thrown within the class
+     * 
+     * @param {Error} error 
+     * @param  {...any} args 
+     * @returns 
+     */
+    handleError(error, ...args) {
+        if (this.errorCallback) {
+            this.errorCallback({
+                errorId: error.id,
+                error: error.getText(...args)
+            });
+
+            return;
+        }
+
+        console.error(error.getText(...args));
     }
 }
 
