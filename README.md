@@ -283,7 +283,8 @@ Parameters:
 | Parameter | Description |
 | --------- | ----------- |
 | [exposed-data] | **Object** (optional) - An object containing all the properties and methods that will be exposed to the content scripts. This are the limitations: do not put a property (or method) called "then" or "$getMyTabId", because they will be rejected. Also, if you expose a property, it must be JSON-friendly to be correctly received by other scripts. All exposed methods should also return JSON-friendly values in order to work correctly. | 
-| [options] | **Object** (optional) - An object that will enable further customization. Currently not used in this class.
+| [options] | **Object** (optional) - An object that will enable further customization.
+| [options.errorCallback] | **function** - A callback that will be fired whenever there is an error in the background handler. It will get passed an object with some details of the error: an `errorId` and an `error` (the error description).| 
 
 ### BackgroundScript class
 
