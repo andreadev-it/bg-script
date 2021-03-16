@@ -44,7 +44,10 @@ class BackgroundHandler {
             scriptId += `-${tabId}`;
         }
 
-        if (this.scriptConnections.get(scriptId)) return this.handleError(ERRORS.ID_TAKEN, scriptId);
+        if (this.scriptConnections.get(scriptId)) {
+            port.disconnect();
+            return this.handleError(ERRORS.ID_TAKEN, scriptId);
+        }
 
         // In the background script, there is no tab-id associated
         let connectionOptions = { hasTabId: false };

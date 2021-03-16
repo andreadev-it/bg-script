@@ -65,7 +65,11 @@ class BackgroundHandler {
       scriptId += `-${tabId}`;
     }
 
-    if (this.scriptConnections.get(scriptId)) return this.handleError(_Errors.BgHandlerErrors.ID_TAKEN, scriptId); // In the background script, there is no tab-id associated
+    if (this.scriptConnections.get(scriptId)) {
+      port.disconnect();
+      return this.handleError(_Errors.BgHandlerErrors.ID_TAKEN, scriptId);
+    } // In the background script, there is no tab-id associated
+
 
     let connectionOptions = {
       hasTabId: false
@@ -341,6 +345,7 @@ class Connection extends _CustomEventTarget.default {
     this.parseExposedData(exposedData);
     this.port.onMessage.addListener(message => this.handleMessage(message));
     this.port.onDisconnect.addListener(() => {
+      console.log("Port disconnected!");
       this.fireEvent("disconnect");
     });
   }
