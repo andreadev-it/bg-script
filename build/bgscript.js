@@ -228,6 +228,11 @@ class BackgroundScript {
     this.connection.addListener("disconnect", () => {
       this.connection = null;
     });
+    window.addEventListener("beforeunload", () => {
+      if (this.connection) {
+        this.connection.disconnect();
+      }
+    });
   }
   /**
    * Function to retrieve the connection proxy.
@@ -396,6 +401,10 @@ class Connection extends _CustomEventTarget.default {
       if (this.proxy) return resolve(this.proxy);
       this.initConnection(resolve);
     });
+  }
+
+  disconnect() {
+    this.port.disconnect();
   }
   /**
    * Handle the incoming bootstrapping informations, and initializes the proxy.

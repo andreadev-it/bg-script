@@ -115,6 +115,10 @@ export class Connection extends CustomEventTarget {
         });
     }
 
+    disconnect() {
+        this.port.disconnect();
+    }
+
     /**
      * Handle the incoming bootstrapping informations, and initializes the proxy.
      * 

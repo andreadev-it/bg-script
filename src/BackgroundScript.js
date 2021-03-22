@@ -61,6 +61,12 @@ class BackgroundScript {
         this.connection.addListener("disconnect", () => {
             this.connection = null;
         });
+
+        window.addEventListener("beforeunload", () => {
+            if (this.connection) {
+                this.connection.disconnect();
+            }
+        });
     }
 
     /**
