@@ -112,6 +112,22 @@ class BackgroundHandler {
 
         return proxy;
     }
+
+    /**
+     * Check if a script with a specific id associated to a specific tab has made a connection to the background page.
+     * 
+     * @param {string} scriptId 
+     * @param {string} tabId 
+     * @returns Whether the script is connected
+     */
+    hasConnectedScript(scriptId, tabId) {
+        let specificScriptId = scriptId;
+
+        if (tabId) specificScriptId += `-${tabId}`;
+
+        return this.scriptConnections.has(specificScriptId);
+    }
+
     /**
      * Handle the errors thrown within the class
      * 
