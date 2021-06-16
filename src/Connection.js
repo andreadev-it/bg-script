@@ -213,7 +213,7 @@ export class Connection extends CustomEventTarget {
                     ).catch(
                         (error) => {
                             console.error(error); // Allows to see the problem within the throwing script too
-                            this.sendCallError(message.id, result);
+                            this.sendCallError(message.id, error);
                         }
                     );
                 
