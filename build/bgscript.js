@@ -132,6 +132,20 @@ class BackgroundHandler {
     return proxy;
   }
   /**
+   * Check if a script with a specific id associated to a specific tab has made a connection to the background page.
+   * 
+   * @param {string} scriptId 
+   * @param {string} tabId 
+   * @returns Whether the script is connected
+   */
+
+
+  hasConnectedScript(scriptId, tabId) {
+    let specificScriptId = scriptId;
+    if (tabId) specificScriptId += `-${tabId}`;
+    return this.scriptConnections.has(specificScriptId);
+  }
+  /**
    * Handle the errors thrown within the class
    * 
    * @param {Error} error 
@@ -495,7 +509,7 @@ class Connection extends _CustomEventTarget.default {
         this._promisify(this.exposedMethods[message.name], message.args).then(result => this.sendCallResult(message.id, result)).catch(error => {
           console.error(error); // Allows to see the problem within the throwing script too
 
-          this.sendCallError(message.id, result);
+          this.sendCallError(message.id, error);
         });
 
         return null;
