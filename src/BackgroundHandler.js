@@ -38,6 +38,7 @@ class BackgroundHandler extends CustomEventTarget {
 
         let [name, scriptId] = this.parsePortName(port);
         let tabId = port.sender.tab.id;
+        if (tabId == -1) tabId = null;
 
         // If the script id is already taken, terminate the connection and send an error
         if (this.scriptConnections.get(scriptId)) {
