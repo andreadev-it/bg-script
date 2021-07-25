@@ -50,7 +50,7 @@ class BackgroundHandler extends CustomEventTarget {
 
         let connection = new Connection(port, this.exposedData, connectionOptions);
 
-        connection.addListener("disconnect", () => this.disconnectScript(scriptId, name, tabId) );
+        connection.addListener("disconnect", () => this.disconnectScript(name, tabId) );
 
         this.scriptConnections.set(scriptId, connection);
 
@@ -91,15 +91,30 @@ class BackgroundHandler extends CustomEventTarget {
 
         if (this.isTabAgnostic(port)) {
             scriptId = port.name.substr(CONNECTION_PREFIX_NOTAB.length);
-            completeScriptId = scriptId;
         }
         else {
             scriptId = port.name.substr(CONNECTION_PREFIX.length);
             tabId = port.sender.tab.id;
-            completeScriptId += `-${tabId}`;
         }
 
+        completeScriptId = this.generateScriptId(scriptId, tabId);
+
         return [scriptId, completeScriptId];
+    }
+
+    /**
+     * Generate a script id to be used within the connections map
+     * 
+     * @param {string} name 
+     * @param {number} tabId 
+     * @returns {string} The generated script id
+     */
+    generateScriptId(name, tabId) {
+        let scriptId = name;
+        if (tabId) {
+            scriptId += `-${tabId}`;
+        }
+        return scriptId;
     }
 
     /**
@@ -107,7 +122,15 @@ class BackgroundHandler extends CustomEventTarget {
      * 
      * @param {string} id
      */
-    disconnectScript(id, name, tabId) {
+    disconnectScript(name, tabId) {
+        let id = this.generateScriptId(name, tabId);
+        let conn = this.scriptConnections.get(id);
+
+        // Disconnect the script if it hasn't disconnected yet
+        if (conn) {
+            conn.disconnect();
+        }
+        
         // Remove the script in the connections map
         this.scriptConnections.delete(id);
         // Fire the disconnection event

@@ -1,3 +1,4 @@
+import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
 
 /** 
@@ -8,7 +9,7 @@ import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connec
  * @property {Connection} connection The actual connection object that handles the communications with the background script.
  * @property {string} context The context of this script. 
  */
-class BackgroundScript {
+class BackgroundScript extends CustomEventTarget {
 
     /**
      * It creates a new Background Script class and initialize all the class properties. It will also bootstrap the actual connection.
@@ -22,6 +23,8 @@ class BackgroundScript {
      *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
      */
     constructor(scriptId, exposedData = {}, options = { context: "content" }) {
+        super();
+
         this.scriptId = scriptId ?? this._uuidv4();
         this.connection = null;
         this.exposedData = exposedData;
@@ -59,14 +62,26 @@ class BackgroundScript {
         this.connection = new Connection(port, this.exposedData);
         
         this.connection.addListener("disconnect", () => {
-            this.connection = null;
+            this.disconnectBackgroundScript();
         });
 
         window.addEventListener("beforeunload", () => {
-            if (this.connection) {
-                this.connection.disconnect();
-            }
+            this.disconnectBackgroundScript();
         });
+
+        this.fireEvent("connected", {});
+    }
+
+    /**
+     * Function to disconnect this script
+     */
+    disconnectBackgroundScript() {
+        if (this.connection) {
+            this.connection.disconnect();
+        }
+
+        this.connection = null;
+        this.fireEvent("disconnected", {});
     }
 
     /**

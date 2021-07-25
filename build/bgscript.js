@@ -73,7 +73,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
       hasTabId: false
     };
     let connection = new _Connection.Connection(port, this.exposedData, connectionOptions);
-    connection.addListener("disconnect", () => this.disconnectScript(scriptId, name, tabId));
+    connection.addListener("disconnect", () => this.disconnectScript(name, tabId));
     this.scriptConnections.set(scriptId, connection); // Fire the connection event
 
     this.fireEvent("connectionreceived", {
@@ -114,14 +114,31 @@ class BackgroundHandler extends _CustomEventTarget.default {
 
     if (this.isTabAgnostic(port)) {
       scriptId = port.name.substr(_Connection.CONNECTION_PREFIX_NOTAB.length);
-      completeScriptId = scriptId;
     } else {
       scriptId = port.name.substr(_Connection.CONNECTION_PREFIX.length);
       tabId = port.sender.tab.id;
-      completeScriptId += `-${tabId}`;
     }
 
+    completeScriptId = this.generateScriptId(scriptId, tabId);
     return [scriptId, completeScriptId];
+  }
+  /**
+   * Generate a script id to be used within the connections map
+   * 
+   * @param {string} name 
+   * @param {number} tabId 
+   * @returns {string} The generated script id
+   */
+
+
+  generateScriptId(name, tabId) {
+    let scriptId = name;
+
+    if (tabId) {
+      scriptId += `-${tabId}`;
+    }
+
+    return scriptId;
   }
   /**
    * Disconnect a script based on its id 
@@ -130,8 +147,15 @@ class BackgroundHandler extends _CustomEventTarget.default {
    */
 
 
-  disconnectScript(id, name, tabId) {
-    // Remove the script in the connections map
+  disconnectScript(name, tabId) {
+    let id = this.generateScriptId(name, tabId);
+    let conn = this.scriptConnections.get(id); // Disconnect the script if it hasn't disconnected yet
+
+    if (conn) {
+      conn.disconnect();
+    } // Remove the script in the connections map
+
+
     this.scriptConnections.delete(id); // Fire the disconnection event
 
     this.fireEvent("connectionended", {
@@ -210,7 +234,11 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
+var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"));
+
 var _Connection = require("./Connection.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /** 
  * Class that will handle the connection from a content script to the background script
@@ -220,7 +248,7 @@ var _Connection = require("./Connection.js");
  * @property {Connection} connection The actual connection object that handles the communications with the background script.
  * @property {string} context The context of this script. 
  */
-class BackgroundScript {
+class BackgroundScript extends _CustomEventTarget.default {
   /**
    * It creates a new Background Script class and initialize all the class properties. It will also bootstrap the actual connection.
    * 
@@ -237,6 +265,7 @@ class BackgroundScript {
   }) {
     var _options$context;
 
+    super();
     this.scriptId = scriptId !== null && scriptId !== void 0 ? scriptId : this._uuidv4();
     this.connection = null;
     this.exposedData = exposedData;
@@ -271,13 +300,25 @@ class BackgroundScript {
     });
     this.connection = new _Connection.Connection(port, this.exposedData);
     this.connection.addListener("disconnect", () => {
-      this.connection = null;
+      this.disconnectBackgroundScript();
     });
     window.addEventListener("beforeunload", () => {
-      if (this.connection) {
-        this.connection.disconnect();
-      }
+      this.disconnectBackgroundScript();
     });
+    this.fireEvent("connected", {});
+  }
+  /**
+   * Function to disconnect this script
+   */
+
+
+  disconnectBackgroundScript() {
+    if (this.connection) {
+      this.connection.disconnect();
+    }
+
+    this.connection = null;
+    this.fireEvent("disconnected", {});
   }
   /**
    * Function to retrieve the connection proxy.
@@ -315,7 +356,7 @@ class BackgroundScript {
 var _default = BackgroundScript;
 exports.default = _default;
 
-},{"./Connection.js":4}],4:[function(require,module,exports){
+},{"./Connection.js":4,"./CustomEventTarget.js":5}],4:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {

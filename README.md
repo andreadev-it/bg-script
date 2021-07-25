@@ -286,6 +286,15 @@ Parameters:
 | [options] | **Object** (optional) - An object that will enable further customization.
 | [options.errorCallback] | **function** - A callback that will be fired whenever there is an error in the background handler. It will get passed an object with some details of the error: an `errorId` and an `error` (the error description).| 
 
+Events:
+
+| Name | Details | Description |
+| ---- | ------- | ----------- |
+| connectionreceived | `{ scriptId, tabId }` | This event fires when a script has successfully connected to the background handler. |
+| connectionended | `{ scriptId, tabId }` | This event fires when a script has succesfully disconnected from the background handler. |
+
+In [this page](https://developer.chrome.com/docs/extensions/mv2/messaging/#port-lifetime) you can find more information about the connection lifecycle.
+
 ### BackgroundScript class
 
 **Class creation:**
@@ -301,6 +310,13 @@ Parameters:
 | [exposed-data] | **Object** (optional) - An object containing all the properties and methods that will be exposed to the Background script. You can put almost everything here, but just avoid to insert a "then" method, because it will be ignored. Also remember that if you want to directly get a remote property, it must be JSON-friendly, so don't insert properties that cannot be converted to JSON. |
 | [options] | **Object** (optional) - An object with some options to customize how the script work |
 | [options.context] | **String** - One of "content" (default), "devtools" and "tab-agnostic". If the value is "content", the script id will be associated with the current tab id. If you want to use this library from a devtools script, then you must set this option to "devtools" to automatically associate the script id with the inspected tab id. If the value is "tab-agnostic" the script id won't be associated to any tab id, so you won't be able to create another connection with the same script id. |
+
+Events:
+
+| Name | Description |
+| ---- | ----------- |
+| connected | The script has succesfully connected to the background handler. Since the first connection is done when you create the class instance, this event will only fire for the following connections and not for the first one.
+| disconnected | The script has succesfully disconnected from the background handler. |
 
 ### Connection proxy
 
