@@ -19,9 +19,13 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
+var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"));
+
 var _Connection = require("./Connection.js");
 
 var _Errors = require("./Errors");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
@@ -30,7 +34,7 @@ var _Errors = require("./Errors");
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
  * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
-class BackgroundHandler {
+class BackgroundHandler extends _CustomEventTarget.default {
   /**
    * Creates a new Background Handler and starts listening to new connections.
    * 
@@ -40,6 +44,7 @@ class BackgroundHandler {
   constructor(exposedData = {}, options = {}) {
     var _options$errorCallbac;
 
+    super();
     this.scriptConnections = new Map(); // script-id --> connection
 
     this.exposedData = exposedData;
@@ -49,21 +54,14 @@ class BackgroundHandler {
   /**
    * Handle a new incoming connection
    * 
-   * @param {chrome.runtime.Port} port The newly created connection to a content script.
+   * @param {chrome.runtime.Port} port The newly created connection to a content script
    */
 
 
   handleNewConnection(port) {
     if (!this.isInternalConnection(port)) return;
-    let scriptId = "";
-
-    if (this.isTabAgnostic(port)) {
-      scriptId = port.name.substr(_Connection.CONNECTION_PREFIX_NOTAB.length);
-    } else {
-      scriptId = port.name.substr(_Connection.CONNECTION_PREFIX.length);
-      let tabId = port.sender.tab.id;
-      scriptId += `-${tabId}`;
-    }
+    let [name, scriptId] = this.parsePortName(port);
+    let tabId = port.sender.tab.id; // If the script id is already taken, terminate the connection and send an error
 
     if (this.scriptConnections.get(scriptId)) {
       port.disconnect();
@@ -75,8 +73,13 @@ class BackgroundHandler {
       hasTabId: false
     };
     let connection = new _Connection.Connection(port, this.exposedData, connectionOptions);
-    connection.addListener("disconnect", () => this.disconnectScript(scriptId));
-    this.scriptConnections.set(scriptId, connection);
+    connection.addListener("disconnect", () => this.disconnectScript(scriptId, name, tabId));
+    this.scriptConnections.set(scriptId, connection); // Fire the connection event
+
+    this.fireEvent("connectionreceived", {
+      scriptId: name,
+      tabId
+    });
   }
   /**
    * Checks if the connection was initialized from this library
@@ -99,14 +102,42 @@ class BackgroundHandler {
     return port.name.startsWith(_Connection.CONNECTION_PREFIX_NOTAB);
   }
   /**
+   * Parse the port name and extracts a unique identifier (the script id).
+   * 
+   * @param {chrome.runtime.Port} port The connection
+   * @returns {string} The script id
+   */
+
+
+  parsePortName(port) {
+    let scriptId, tabId, completeScriptId;
+
+    if (this.isTabAgnostic(port)) {
+      scriptId = port.name.substr(_Connection.CONNECTION_PREFIX_NOTAB.length);
+      completeScriptId = scriptId;
+    } else {
+      scriptId = port.name.substr(_Connection.CONNECTION_PREFIX.length);
+      tabId = port.sender.tab.id;
+      completeScriptId += `-${tabId}`;
+    }
+
+    return [scriptId, completeScriptId];
+  }
+  /**
    * Disconnect a script based on its id 
    * 
    * @param {string} id
    */
 
 
-  disconnectScript(id) {
-    this.scriptConnections.delete(id);
+  disconnectScript(id, name, tabId) {
+    // Remove the script in the connections map
+    this.scriptConnections.delete(id); // Fire the disconnection event
+
+    this.fireEvent("connectionended", {
+      scriptId: name,
+      tabId
+    });
   }
   /**
    * Get the connection to a script based on its id and the chrome tab that it's associated with.
@@ -171,7 +202,7 @@ class BackgroundHandler {
 var _default = BackgroundHandler;
 exports.default = _default;
 
-},{"./Connection.js":4,"./Errors":6}],3:[function(require,module,exports){
+},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Errors":6}],3:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
