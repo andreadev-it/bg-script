@@ -61,7 +61,8 @@ class BackgroundHandler extends _CustomEventTarget.default {
   handleNewConnection(port) {
     if (!this.isInternalConnection(port)) return;
     let [name, scriptId] = this.parsePortName(port);
-    let tabId = port.sender.tab.id; // If the script id is already taken, terminate the connection and send an error
+    let tabId = port.sender.tab.id;
+    if (tabId == -1) tabId = null; // If the script id is already taken, terminate the connection and send an error
 
     if (this.scriptConnections.get(scriptId)) {
       port.disconnect();
