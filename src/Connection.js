@@ -175,7 +175,7 @@ export class Connection extends CustomEventTarget {
                 return {
                     type: MESSAGE_TYPES.ANSWER,
                     id: message.id,
-                    result: this.port.sender.tab.id
+                    result: this.port.sender?.tab?.id ?? null
                 }
 
             case MESSAGE_TYPES.GET:

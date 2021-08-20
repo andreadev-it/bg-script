@@ -59,9 +59,11 @@ class BackgroundHandler extends _CustomEventTarget.default {
 
 
   handleNewConnection(port) {
+    var _port$sender$tab$id, _port$sender, _port$sender$tab;
+
     if (!this.isInternalConnection(port)) return;
     let [name, scriptId] = this.parsePortName(port);
-    let tabId = port.sender.tab.id;
+    let tabId = (_port$sender$tab$id = (_port$sender = port.sender) === null || _port$sender === void 0 ? void 0 : (_port$sender$tab = _port$sender.tab) === null || _port$sender$tab === void 0 ? void 0 : _port$sender$tab.id) !== null && _port$sender$tab$id !== void 0 ? _port$sender$tab$id : null;
     if (tabId == -1) tabId = null; // If the script id is already taken, terminate the connection and send an error
 
     if (this.scriptConnections.get(scriptId)) {
@@ -526,6 +528,8 @@ class Connection extends _CustomEventTarget.default {
 
 
   handleMessageTypes(message) {
+    var _this$port$sender$tab, _this$port$sender, _this$port$sender$tab2;
+
     let callback;
 
     switch (message.type) {
@@ -547,7 +551,7 @@ class Connection extends _CustomEventTarget.default {
         return {
           type: MESSAGE_TYPES.ANSWER,
           id: message.id,
-          result: this.port.sender.tab.id
+          result: (_this$port$sender$tab = (_this$port$sender = this.port.sender) === null || _this$port$sender === void 0 ? void 0 : (_this$port$sender$tab2 = _this$port$sender.tab) === null || _this$port$sender$tab2 === void 0 ? void 0 : _this$port$sender$tab2.id) !== null && _this$port$sender$tab !== void 0 ? _this$port$sender$tab : null
         };
 
       case MESSAGE_TYPES.GET:
