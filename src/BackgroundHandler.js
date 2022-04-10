@@ -19,7 +19,6 @@ class BackgroundHandler extends CustomEventTarget {
      */
     constructor(exposedData = {}, options = {}) {
         super();
-        
         this.scriptConnections = new Map(); // script-id --> connection
         this.exposedData = exposedData;
         this.errorCallback = options.errorCallback ?? null;

@@ -22,10 +22,15 @@ class BackgroundScript extends CustomEventTarget {
      *                                     "devtools" - To be used in scripts that run from the devtools.
      *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
      */
-    constructor(scriptId, exposedData = {}, options = { context: "content" }) {
+    constructor(scriptId, exposedData = {}, options = { context: "content", multipleFrames: false }) {
         super();
 
         this.scriptId = scriptId ?? this._uuidv4();
+
+        if (options.multipleFrames) {
+            this.scriptId += "-" + location.href; 
+        }
+
         this.connection = null;
         this.exposedData = exposedData;
         this.context = options.context ?? "content";
