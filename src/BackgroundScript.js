@@ -1,5 +1,5 @@
 import CustomEventTarget from './CustomEventTarget.js';
-import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
+import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, FRAME_PREFIX, FRAME_SUFFIX } from './Connection.js';
 
 /** 
  * Class that will handle the connection from a content script to the background script
@@ -27,9 +27,11 @@ class BackgroundScript extends CustomEventTarget {
 
         this.scriptId = scriptId ?? this._uuidv4();
 
-        if (options.multipleFrames) {
-            this.scriptId += "-" + location.href; 
+        if (options.context === "tab-agnostic" && options.multipleFrames) {
+            throw new Error("You cannot use multiple frames with tab-agnostic scripts");
         }
+
+        this.isMultipleFrames = options.multipleFrames;
 
         this.connection = null;
         this.exposedData = exposedData;
@@ -38,25 +40,39 @@ class BackgroundScript extends CustomEventTarget {
         this.connectBackgroundScript();
     }
 
-    /**
-     * Creates a connection to the background script based on the script context. It initializes the "connection" property.
-     */
-    connectBackgroundScript() {
-
+    getCompleteScriptId() {
         let completeScriptId = "";
+
+        let con_prefix = CONNECTION_PREFIX;
+        let con_prefix_notab = CONNECTION_PREFIX_NOTAB;
+
+        if (this.isMultipleFrames) {
+            con_prefix += `${FRAME_PREFIX}${location.href}${FRAME_SUFFIX}`;
+            con_prefix_notab += `${FRAME_PREFIX}${location.href}${FRAME_SUFFIX}`;
+        }
 
         switch (this.context) {
             case "content":
-                completeScriptId = CONNECTION_PREFIX + this.scriptId;
+                completeScriptId = con_prefix + this.scriptId;
                 break;
             case "devtools":
                 if (!chrome.devtools) throw "Cannot set context='devtools' when the script is not in a devtools window.";
-                completeScriptId = CONNECTION_PREFIX_NOTAB + this.scriptId + "-" + chrome.devtools.inspectedWindow.tabId;
+                completeScriptId = con_prefix_notab + this.scriptId + "-" + chrome.devtools.inspectedWindow.tabId;
                 break;
             case "tab-agnostic":
                 completeScriptId = this.scriptId;
                 break;
         }
+        
+        return completeScriptId;
+    }
+
+    /**
+     * Creates a connection to the background script based on the script context. It initializes the "connection" property.
+     */
+    connectBackgroundScript() {
+
+        let completeScriptId = this.getCompleteScriptId();
 
         let port = chrome.runtime.connect(
             {

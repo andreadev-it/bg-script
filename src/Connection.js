@@ -6,6 +6,12 @@ export const CONNECTION_PREFIX = "bgscript-";
 /** @constant {string} CONNECTION_PREFIX_NOTAB A prefix added to the connection port name to recognize an internal connection to a script that is not associated with any chrome tab. */
 export const CONNECTION_PREFIX_NOTAB = "bgscript.notab-";
 
+/** @constant {string} FRAME_PREFIX A prefix added when the scripts can handle multiple frames (it will preceed a frame location) */
+/** @constant {string} FRAME_SUFFIX A suffix added when the scripts can handle multiple frames (it will follow a frame location) */
+export const FRAME_PREFIX = "bgscript.frame-";
+export const FRAME_SUFFIX = "-bgscript.endframe";
+export const BASE_FRAME = "base";
+
 /** @constant {object} MESSAGE_TYPES It contains all the message types values to be used in the code */
 export const MESSAGE_TYPES = {
     BOOTSTRAP: "bootstrap",  // initialization message

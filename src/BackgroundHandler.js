@@ -1,11 +1,11 @@
 import CustomEventTarget from './CustomEventTarget.js';
-import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
+import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, BASE_FRAME } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors';
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
- * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
+ * @property {Map<string, Map<string, Connection>>} scriptConnections A Map that will relate every script ID to its Connection object.
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
  * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
@@ -19,7 +19,7 @@ class BackgroundHandler extends CustomEventTarget {
      */
     constructor(exposedData = {}, options = {}) {
         super();
-        this.scriptConnections = new Map(); // script-id --> connection
+        this.scriptConnections = new Map(); // script-id --> connection frames (map frame -> connection)
         this.exposedData = exposedData;
         this.errorCallback = options.errorCallback ?? null;
 
@@ -35,12 +35,12 @@ class BackgroundHandler extends CustomEventTarget {
 
         if (!this.isInternalConnection(port)) return;
 
-        let [name, scriptId] = this.parsePortName(port);
+        let {name, scriptId, frameSrc} = this.parsePortName(port);
         let tabId = port.sender?.tab?.id ?? null;
         if (tabId == -1) tabId = null;
 
         // If the script id is already taken, terminate the connection and send an error
-        if (this.scriptConnections.get(scriptId)) {
+        if (this.hasConnectedScript(scriptId, frameSrc)) {
             port.disconnect();
             return this.handleError(ERRORS.ID_TAKEN, scriptId);
         }
@@ -52,13 +52,28 @@ class BackgroundHandler extends CustomEventTarget {
 
         connection.addListener("disconnect", () => this.disconnectScript(name, tabId) );
 
-        this.scriptConnections.set(scriptId, connection);
+        // Add the connection to this port to the connections map
+        this.addConnection(connection, scriptId, frameSrc);
 
         // Fire the connection event
         this.fireEvent("connectionreceived", {
             scriptId: name,
             tabId
         });
+    }
+
+    /**
+     * Add a connection to the connections Map
+     */
+    addConection(connection, scriptId, frameSrc=BASE_FRAME) {
+        let conn_frames = this.scriptConnections.get(scriptId);
+        
+        if (!conn_frames) {
+            conn_frames = new Map();
+        }
+
+        conn_frames.set(frameSrc, connection);
+        this.scriptConnections.set(scriptId, conn_frames);
     }
 
     /**
@@ -97,9 +112,19 @@ class BackgroundHandler extends CustomEventTarget {
             tabId = port.sender.tab.id;
         }
 
+        if (this.isInFrame(port)) {
+            let [frameSrc, scriptId] = scriptId.split(FRAME_SUFFIX);
+            frameSrc = scriptId.substr(FRAME_PREFIX.length, frameSrc.length);
+
+        }
+
         completeScriptId = this.generateScriptId(scriptId, tabId);
 
-        return [scriptId, completeScriptId];
+        return {
+            scriptId,
+            completeScriptId,
+            frameSrc
+        }
     }
 
     /**
@@ -122,21 +147,29 @@ class BackgroundHandler extends CustomEventTarget {
      * 
      * @param {string} id
      */
-    disconnectScript(name, tabId) {
+    disconnectScript(name, tabId, frameSrc=BASE_FRAME) {
         let id = this.generateScriptId(name, tabId);
-        let conn = this.scriptConnections.get(id);
+        let conn_frames = this.scriptConnections.get(id);
+        let conn = conn_frames?.get(frameSrc);
 
         // Disconnect the script if it hasn't disconnected yet
-        if (conn) {
-            conn.disconnect();
+        if (!conn) {
+            return;
         }
         
+        conn.disconnect();
+
         // Remove the script in the connections map
-        this.scriptConnections.delete(id);
+        conn_frames.delete(frameSrc);
+
+        if (conn_frames.size == 0) {
+            this.scriptConnections.delete(id);
+        }
         // Fire the disconnection event
         this.fireEvent("connectionended", {
             scriptId: name,
-            tabId
+            tabId,
+            frameSrc
         });
     }
 
@@ -148,13 +181,14 @@ class BackgroundHandler extends CustomEventTarget {
      * @param {string} tabId The id of the chrome tab this scripts relates to
      * @return {Promise<Proxy>} The connection proxy
      */
-    async getScriptConnection(scriptId, tabId) {
+    async getScriptConnection(scriptId, tabId, frameSrc=BASE_FRAME) {
 
         let specificScriptId = scriptId;
 
         if (tabId) specificScriptId += `-${tabId}`;
 
-        let connection = this.scriptConnections.get(specificScriptId);
+        let conn_frames = this.scriptConnections.get(specificScriptId);
+        let connection = conn_frames?.get(frameSrc);
 
         if (!connection) {
             this.handleError(ERRORS.NO_CONNECTION, scriptId, tabId);
@@ -171,14 +205,17 @@ class BackgroundHandler extends CustomEventTarget {
      * 
      * @param {string} scriptId 
      * @param {string} tabId 
+     * @param {string} frameSrc
      * @returns Whether the script is connected
      */
-    hasConnectedScript(scriptId, tabId) {
+    hasConnectedScript(scriptId, tabId, frameSrc=BASE_FRAME) {
         let specificScriptId = scriptId;
 
         if (tabId) specificScriptId += `-${tabId}`;
 
-        return this.scriptConnections.has(specificScriptId);
+        let conn_frames = this.scriptConnections.get(specificScriptId);
+        if (!conn_frames) return false;
+        return conn_frames.has(frameSrc);
     }
 
     /**
