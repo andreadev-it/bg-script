@@ -30,7 +30,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
- * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
+ * @property {Map<string, Map<string, Connection>>} scriptConnections A Map that will relate every script ID to its Connection object.
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
  * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
@@ -45,7 +45,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
     var _options$errorCallbac;
 
     super();
-    this.scriptConnections = new Map(); // script-id --> connection
+    this.scriptConnections = new Map(); // script-id --> connection frames (map frame -> connection)
 
     this.exposedData = exposedData;
     this.errorCallback = (_options$errorCallbac = options.errorCallback) !== null && _options$errorCallbac !== void 0 ? _options$errorCallbac : null;
@@ -62,11 +62,15 @@ class BackgroundHandler extends _CustomEventTarget.default {
     var _port$sender$tab$id, _port$sender, _port$sender$tab;
 
     if (!this.isInternalConnection(port)) return;
-    let [name, scriptId] = this.parsePortName(port);
+    let {
+      name,
+      scriptId,
+      frameSrc
+    } = this.parsePortName(port);
     let tabId = (_port$sender$tab$id = (_port$sender = port.sender) === null || _port$sender === void 0 ? void 0 : (_port$sender$tab = _port$sender.tab) === null || _port$sender$tab === void 0 ? void 0 : _port$sender$tab.id) !== null && _port$sender$tab$id !== void 0 ? _port$sender$tab$id : null;
     if (tabId == -1) tabId = null; // If the script id is already taken, terminate the connection and send an error
 
-    if (this.scriptConnections.get(scriptId)) {
+    if (this.hasConnectedScript(scriptId, frameSrc)) {
       port.disconnect();
       return this.handleError(_Errors.BgHandlerErrors.ID_TAKEN, scriptId);
     } // In the background script, there is no tab-id associated
@@ -76,13 +80,29 @@ class BackgroundHandler extends _CustomEventTarget.default {
       hasTabId: false
     };
     let connection = new _Connection.Connection(port, this.exposedData, connectionOptions);
-    connection.addListener("disconnect", () => this.disconnectScript(name, tabId));
-    this.scriptConnections.set(scriptId, connection); // Fire the connection event
+    connection.addListener("disconnect", () => this.disconnectScript(name, tabId)); // Add the connection to this port to the connections map
+
+    this.addConnection(connection, scriptId, frameSrc); // Fire the connection event
 
     this.fireEvent("connectionreceived", {
       scriptId: name,
       tabId
     });
+  }
+  /**
+   * Add a connection to the connections Map
+   */
+
+
+  addConection(connection, scriptId, frameSrc = _Connection.BASE_FRAME) {
+    let conn_frames = this.scriptConnections.get(scriptId);
+
+    if (!conn_frames) {
+      conn_frames = new Map();
+    }
+
+    conn_frames.set(frameSrc, connection);
+    this.scriptConnections.set(scriptId, conn_frames);
   }
   /**
    * Checks if the connection was initialized from this library
@@ -122,8 +142,17 @@ class BackgroundHandler extends _CustomEventTarget.default {
       tabId = port.sender.tab.id;
     }
 
+    if (this.isInFrame(port)) {
+      let [frameSrc, scriptId] = scriptId.split(FRAME_SUFFIX);
+      frameSrc = scriptId.substr(FRAME_PREFIX.length, frameSrc.length);
+    }
+
     completeScriptId = this.generateScriptId(scriptId, tabId);
-    return [scriptId, completeScriptId];
+    return {
+      scriptId,
+      completeScriptId,
+      frameSrc
+    };
   }
   /**
    * Generate a script id to be used within the connections map
@@ -150,20 +179,28 @@ class BackgroundHandler extends _CustomEventTarget.default {
    */
 
 
-  disconnectScript(name, tabId) {
+  disconnectScript(name, tabId, frameSrc = _Connection.BASE_FRAME) {
     let id = this.generateScriptId(name, tabId);
-    let conn = this.scriptConnections.get(id); // Disconnect the script if it hasn't disconnected yet
+    let conn_frames = this.scriptConnections.get(id);
+    let conn = conn_frames === null || conn_frames === void 0 ? void 0 : conn_frames.get(frameSrc); // Disconnect the script if it hasn't disconnected yet
 
-    if (conn) {
-      conn.disconnect();
-    } // Remove the script in the connections map
+    if (!conn) {
+      return;
+    }
 
+    conn.disconnect(); // Remove the script in the connections map
 
-    this.scriptConnections.delete(id); // Fire the disconnection event
+    conn_frames.delete(frameSrc);
+
+    if (conn_frames.size == 0) {
+      this.scriptConnections.delete(id);
+    } // Fire the disconnection event
+
 
     this.fireEvent("connectionended", {
       scriptId: name,
-      tabId
+      tabId,
+      frameSrc
     });
   }
   /**
@@ -176,10 +213,11 @@ class BackgroundHandler extends _CustomEventTarget.default {
    */
 
 
-  async getScriptConnection(scriptId, tabId) {
+  async getScriptConnection(scriptId, tabId, frameSrc = _Connection.BASE_FRAME) {
     let specificScriptId = scriptId;
     if (tabId) specificScriptId += `-${tabId}`;
-    let connection = this.scriptConnections.get(specificScriptId);
+    let conn_frames = this.scriptConnections.get(specificScriptId);
+    let connection = conn_frames === null || conn_frames === void 0 ? void 0 : conn_frames.get(frameSrc);
 
     if (!connection) {
       this.handleError(_Errors.BgHandlerErrors.NO_CONNECTION, scriptId, tabId);
@@ -194,14 +232,17 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * 
    * @param {string} scriptId 
    * @param {string} tabId 
+   * @param {string} frameSrc
    * @returns Whether the script is connected
    */
 
 
-  hasConnectedScript(scriptId, tabId) {
+  hasConnectedScript(scriptId, tabId, frameSrc = _Connection.BASE_FRAME) {
     let specificScriptId = scriptId;
     if (tabId) specificScriptId += `-${tabId}`;
-    return this.scriptConnections.has(specificScriptId);
+    let conn_frames = this.scriptConnections.get(specificScriptId);
+    if (!conn_frames) return false;
+    return conn_frames.has(frameSrc);
   }
   /**
    * Handle the errors thrown within the class
@@ -264,33 +305,43 @@ class BackgroundScript extends _CustomEventTarget.default {
    *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
    */
   constructor(scriptId, exposedData = {}, options = {
-    context: "content"
+    context: "content",
+    multipleFrames: false
   }) {
     var _options$context;
 
     super();
     this.scriptId = scriptId !== null && scriptId !== void 0 ? scriptId : this._uuidv4();
+
+    if (options.context === "tab-agnostic" && options.multipleFrames) {
+      throw new Error("You cannot use multiple frames with tab-agnostic scripts");
+    }
+
+    this.isMultipleFrames = options.multipleFrames;
     this.connection = null;
     this.exposedData = exposedData;
     this.context = (_options$context = options.context) !== null && _options$context !== void 0 ? _options$context : "content";
     this.connectBackgroundScript();
   }
-  /**
-   * Creates a connection to the background script based on the script context. It initializes the "connection" property.
-   */
 
-
-  connectBackgroundScript() {
+  getCompleteScriptId() {
     let completeScriptId = "";
+    let con_prefix = _Connection.CONNECTION_PREFIX;
+    let con_prefix_notab = _Connection.CONNECTION_PREFIX_NOTAB;
+
+    if (this.isMultipleFrames) {
+      con_prefix += `${_Connection.FRAME_PREFIX}${location.href}${_Connection.FRAME_SUFFIX}`;
+      con_prefix_notab += `${_Connection.FRAME_PREFIX}${location.href}${_Connection.FRAME_SUFFIX}`;
+    }
 
     switch (this.context) {
       case "content":
-        completeScriptId = _Connection.CONNECTION_PREFIX + this.scriptId;
+        completeScriptId = con_prefix + this.scriptId;
         break;
 
       case "devtools":
         if (!chrome.devtools) throw "Cannot set context='devtools' when the script is not in a devtools window.";
-        completeScriptId = _Connection.CONNECTION_PREFIX_NOTAB + this.scriptId + "-" + chrome.devtools.inspectedWindow.tabId;
+        completeScriptId = con_prefix_notab + this.scriptId + "-" + chrome.devtools.inspectedWindow.tabId;
         break;
 
       case "tab-agnostic":
@@ -298,6 +349,15 @@ class BackgroundScript extends _CustomEventTarget.default {
         break;
     }
 
+    return completeScriptId;
+  }
+  /**
+   * Creates a connection to the background script based on the script context. It initializes the "connection" property.
+   */
+
+
+  connectBackgroundScript() {
+    let completeScriptId = this.getCompleteScriptId();
     let port = chrome.runtime.connect({
       name: completeScriptId
     });
@@ -365,7 +425,7 @@ exports.default = _default;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.default = exports.Connection = exports.MESSAGE_TYPES = exports.CONNECTION_PREFIX_NOTAB = exports.CONNECTION_PREFIX = void 0;
+exports.default = exports.Connection = exports.MESSAGE_TYPES = exports.BASE_FRAME = exports.FRAME_SUFFIX = exports.FRAME_PREFIX = exports.CONNECTION_PREFIX_NOTAB = exports.CONNECTION_PREFIX = void 0;
 
 var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"));
 
@@ -377,9 +437,19 @@ const CONNECTION_PREFIX = "bgscript-";
 
 exports.CONNECTION_PREFIX = CONNECTION_PREFIX;
 const CONNECTION_PREFIX_NOTAB = "bgscript.notab-";
-/** @constant {object} MESSAGE_TYPES It contains all the message types values to be used in the code */
+/** @constant {string} FRAME_PREFIX A prefix added when the scripts can handle multiple frames (it will preceed a frame location) */
+
+/** @constant {string} FRAME_SUFFIX A suffix added when the scripts can handle multiple frames (it will follow a frame location) */
 
 exports.CONNECTION_PREFIX_NOTAB = CONNECTION_PREFIX_NOTAB;
+const FRAME_PREFIX = "bgscript.frame-";
+exports.FRAME_PREFIX = FRAME_PREFIX;
+const FRAME_SUFFIX = "-bgscript.endframe";
+exports.FRAME_SUFFIX = FRAME_SUFFIX;
+const BASE_FRAME = "base";
+/** @constant {object} MESSAGE_TYPES It contains all the message types values to be used in the code */
+
+exports.BASE_FRAME = BASE_FRAME;
 const MESSAGE_TYPES = {
   BOOTSTRAP: "bootstrap",
   // initialization message
@@ -820,10 +890,20 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
+/**
+ * Class that handles dispatching custom events.
+ * @property {Map} listeners Map events names to a list of functions (listeners)
+ */
 class CustomEventTarget {
   constructor() {
     this.listeners = new Map(); // event --> listeners
   }
+  /**
+   * Adds a listener for a specific event
+   * @param {string} event The event name
+   * @param {function} callback The listener function
+   */
+
 
   addListener(event, callback) {
     if (typeof callback !== "function") throw "The callback must be a function";
@@ -836,6 +916,12 @@ class CustomEventTarget {
 
     callbacksList.push(callback);
   }
+  /**
+   * Removes a listener for a specific event
+   * @param {string} event The event name
+   * @param {function} callback The listener function to be removed
+   */
+
 
   removeListener(event, callback) {
     let callbacksList = this.listeners.get(event);
@@ -844,6 +930,12 @@ class CustomEventTarget {
     if (callbackIndex < 0) return;
     callbacksList.splice(callbackIndex, 1);
   }
+  /**
+   * Dispatches an event
+   * @param {string} event The event name
+   * @param {object} data The event data to be passed to the listeners
+   */
+
 
   fireEvent(event, details = {}) {
     let callbacksList = this.listeners.get(event);
