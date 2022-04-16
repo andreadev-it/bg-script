@@ -1,5 +1,5 @@
 import CustomEventTarget from './CustomEventTarget.js';
-import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, BASE_FRAME } from './Connection.js';
+import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, FRAME_PREFIX, FRAME_SUFFIX, BASE_FRAME } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors';
 
 /** 
@@ -65,7 +65,7 @@ class BackgroundHandler extends CustomEventTarget {
     /**
      * Add a connection to the connections Map
      */
-    addConection(connection, scriptId, frameSrc=BASE_FRAME) {
+    addConnection(connection, scriptId, frameSrc=BASE_FRAME) {
         let conn_frames = this.scriptConnections.get(scriptId);
         
         if (!conn_frames) {
@@ -96,13 +96,20 @@ class BackgroundHandler extends CustomEventTarget {
     }
 
     /**
+     * Check if the incoming connection is from a script inside an iframe
+     */
+    isInFrame(port) {
+        return port.name.includes(FRAME_PREFIX);
+    }
+
+    /**
      * Parse the port name and extracts a unique identifier (the script id).
      * 
      * @param {chrome.runtime.Port} port The connection
      * @returns {string} The script id
      */
     parsePortName(port) {
-        let scriptId, tabId, completeScriptId;
+        let scriptId, tabId, completeScriptId, frameSrc;
 
         if (this.isTabAgnostic(port)) {
             scriptId = port.name.substr(CONNECTION_PREFIX_NOTAB.length);
@@ -113,16 +120,16 @@ class BackgroundHandler extends CustomEventTarget {
         }
 
         if (this.isInFrame(port)) {
-            let [frameSrc, scriptId] = scriptId.split(FRAME_SUFFIX);
-            frameSrc = scriptId.substr(FRAME_PREFIX.length, frameSrc.length);
+            [frameSrc, scriptId] = scriptId.split(FRAME_SUFFIX);
+            frameSrc = frameSrc.substr(FRAME_PREFIX.length, frameSrc.length);
 
         }
 
         completeScriptId = this.generateScriptId(scriptId, tabId);
 
         return {
-            scriptId,
-            completeScriptId,
+            name: scriptId,
+            scriptId: completeScriptId,
             frameSrc
         }
     }

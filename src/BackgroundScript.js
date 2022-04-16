@@ -46,7 +46,7 @@ class BackgroundScript extends CustomEventTarget {
         let con_prefix = CONNECTION_PREFIX;
         let con_prefix_notab = CONNECTION_PREFIX_NOTAB;
 
-        if (this.isMultipleFrames) {
+        if (this.isMultipleFrames && this.isInsideIframe()) {
             con_prefix += `${FRAME_PREFIX}${location.href}${FRAME_SUFFIX}`;
             con_prefix_notab += `${FRAME_PREFIX}${location.href}${FRAME_SUFFIX}`;
         }
@@ -65,6 +65,17 @@ class BackgroundScript extends CustomEventTarget {
         }
         
         return completeScriptId;
+    }
+
+    /**
+     * Function that returns true if the script is running inside an iframe.
+     */
+    isInsideIframe() {
+        try {
+            return window.self !== window.top;
+        } catch (e) {
+            return true;
+        }
     }
 
     /**

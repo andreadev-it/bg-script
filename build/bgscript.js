@@ -94,7 +94,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
    */
 
 
-  addConection(connection, scriptId, frameSrc = _Connection.BASE_FRAME) {
+  addConnection(connection, scriptId, frameSrc = _Connection.BASE_FRAME) {
     let conn_frames = this.scriptConnections.get(scriptId);
 
     if (!conn_frames) {
@@ -125,6 +125,14 @@ class BackgroundHandler extends _CustomEventTarget.default {
     return port.name.startsWith(_Connection.CONNECTION_PREFIX_NOTAB);
   }
   /**
+   * Check if the incoming connection is from a script inside an iframe
+   */
+
+
+  isInFrame(port) {
+    return port.name.includes(_Connection.FRAME_PREFIX);
+  }
+  /**
    * Parse the port name and extracts a unique identifier (the script id).
    * 
    * @param {chrome.runtime.Port} port The connection
@@ -133,7 +141,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
 
 
   parsePortName(port) {
-    let scriptId, tabId, completeScriptId;
+    let scriptId, tabId, completeScriptId, frameSrc;
 
     if (this.isTabAgnostic(port)) {
       scriptId = port.name.substr(_Connection.CONNECTION_PREFIX_NOTAB.length);
@@ -143,14 +151,14 @@ class BackgroundHandler extends _CustomEventTarget.default {
     }
 
     if (this.isInFrame(port)) {
-      let [frameSrc, scriptId] = scriptId.split(FRAME_SUFFIX);
-      frameSrc = scriptId.substr(FRAME_PREFIX.length, frameSrc.length);
+      [frameSrc, scriptId] = scriptId.split(_Connection.FRAME_SUFFIX);
+      frameSrc = frameSrc.substr(_Connection.FRAME_PREFIX.length, frameSrc.length);
     }
 
     completeScriptId = this.generateScriptId(scriptId, tabId);
     return {
-      scriptId,
-      completeScriptId,
+      name: scriptId,
+      scriptId: completeScriptId,
       frameSrc
     };
   }
@@ -329,7 +337,7 @@ class BackgroundScript extends _CustomEventTarget.default {
     let con_prefix = _Connection.CONNECTION_PREFIX;
     let con_prefix_notab = _Connection.CONNECTION_PREFIX_NOTAB;
 
-    if (this.isMultipleFrames) {
+    if (this.isMultipleFrames && this.isInsideIframe()) {
       con_prefix += `${_Connection.FRAME_PREFIX}${location.href}${_Connection.FRAME_SUFFIX}`;
       con_prefix_notab += `${_Connection.FRAME_PREFIX}${location.href}${_Connection.FRAME_SUFFIX}`;
     }
@@ -350,6 +358,18 @@ class BackgroundScript extends _CustomEventTarget.default {
     }
 
     return completeScriptId;
+  }
+  /**
+   * Function that returns true if the script is running inside an iframe.
+   */
+
+
+  isInsideIframe() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true;
+    }
   }
   /**
    * Creates a connection to the background script based on the script context. It initializes the "connection" property.
