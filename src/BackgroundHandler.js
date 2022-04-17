@@ -2,6 +2,9 @@ import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, FRAME_PREFIX, FRAME_SUFFIX, BASE_FRAME } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors';
 
+/* @const CLEANUP_INTERVAL The time it passes between script connections cleanups */
+const CLEANUP_INTERVAL = 3000;
+
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
@@ -24,6 +27,7 @@ class BackgroundHandler extends CustomEventTarget {
         this.errorCallback = options.errorCallback ?? null;
 
         chrome.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
+        this.initCleanup();
     }
 
     /**
@@ -64,6 +68,9 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Add a connection to the connections Map
+     * @param {Connection} connection The connection to be added
+     * @param {string} scriptId The script id
+     * @param {string} frameSrc The iframe url
      */
     addConnection(connection, scriptId, frameSrc=BASE_FRAME) {
         let conn_frames = this.scriptConnections.get(scriptId);
@@ -169,6 +176,14 @@ class BackgroundHandler extends CustomEventTarget {
         // Remove the script in the connections map
         conn_frames.delete(frameSrc);
 
+        // Delete all iframe connections if the tab has been closed
+        if (frameSrc == BASE_FRAME) {
+            for (let frame of conn_frames.keys()) {
+                conn_frames.get(frame).disconnect();
+                conn_frames.delete(frame);
+            }
+        }
+
         if (conn_frames.size == 0) {
             this.scriptConnections.delete(id);
         }
@@ -223,6 +238,36 @@ class BackgroundHandler extends CustomEventTarget {
         let conn_frames = this.scriptConnections.get(specificScriptId);
         if (!conn_frames) return false;
         return conn_frames.has(frameSrc);
+    }
+
+    /**
+     * Init the connections cleanup timer
+     */
+    initCleanup() {
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupConnections();
+        }, CLEANUP_INTERVAL);
+    }
+
+    /**
+     * Stop the connections cleanup timer
+     */
+    stopCleanup() {
+        clearInterval(this.cleanupInterval);
+    }
+
+    /**
+     * Cleanup all connections that only have iframe connections (main tab is closed)
+     */
+    cleanupConnections() {
+        for (let [key, conn_map] of this.scriptConnections) {
+            if (!conn_map.get(BASE_FRAME)) {
+                for (let [frame, conn] of conn_map) {
+                    conn.disconnect();
+                }
+                this.scriptConnections.delete(key);
+            }
+        }
     }
 
     /**

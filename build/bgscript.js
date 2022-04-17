@@ -27,6 +27,8 @@ var _Errors = require("./Errors");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+/* @const CLEANUP_INTERVAL The time it passes between script connections cleanups */
+const CLEANUP_INTERVAL = 3000;
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  * 
@@ -34,6 +36,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
  * @property {object} exposedData The properties and methods exposed to the connecting scripts.
  * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
+
 class BackgroundHandler extends _CustomEventTarget.default {
   /**
    * Creates a new Background Handler and starts listening to new connections.
@@ -50,6 +53,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
     this.exposedData = exposedData;
     this.errorCallback = (_options$errorCallbac = options.errorCallback) !== null && _options$errorCallbac !== void 0 ? _options$errorCallbac : null;
     chrome.runtime.onConnect.addListener(port => this.handleNewConnection(port));
+    this.initCleanup();
   }
   /**
    * Handle a new incoming connection
@@ -91,6 +95,9 @@ class BackgroundHandler extends _CustomEventTarget.default {
   }
   /**
    * Add a connection to the connections Map
+   * @param {Connection} connection The connection to be added
+   * @param {string} scriptId The script id
+   * @param {string} frameSrc The iframe url
    */
 
 
@@ -198,7 +205,14 @@ class BackgroundHandler extends _CustomEventTarget.default {
 
     conn.disconnect(); // Remove the script in the connections map
 
-    conn_frames.delete(frameSrc);
+    conn_frames.delete(frameSrc); // Delete all iframe connections if the tab has been closed
+
+    if (frameSrc == _Connection.BASE_FRAME) {
+      for (let frame of conn_frames.keys()) {
+        conn_frames.get(frame).disconnect();
+        conn_frames.delete(frame);
+      }
+    }
 
     if (conn_frames.size == 0) {
       this.scriptConnections.delete(id);
@@ -251,6 +265,40 @@ class BackgroundHandler extends _CustomEventTarget.default {
     let conn_frames = this.scriptConnections.get(specificScriptId);
     if (!conn_frames) return false;
     return conn_frames.has(frameSrc);
+  }
+  /**
+   * Init the connections cleanup timer
+   */
+
+
+  initCleanup() {
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupConnections();
+    }, CLEANUP_INTERVAL);
+  }
+  /**
+   * Stop the connections cleanup timer
+   */
+
+
+  stopCleanup() {
+    clearInterval(this.cleanupInterval);
+  }
+  /**
+   * Cleanup all connections that only have iframe connections (main tab is closed)
+   */
+
+
+  cleanupConnections() {
+    for (let [key, conn_map] of this.scriptConnections) {
+      if (!conn_map.get(_Connection.BASE_FRAME)) {
+        for (let [frame, conn] of conn_map) {
+          conn.disconnect();
+        }
+
+        this.scriptConnections.delete(key);
+      }
+    }
   }
   /**
    * Handle the errors thrown within the class
