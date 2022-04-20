@@ -1,5 +1,6 @@
 import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB, FRAME_PREFIX, FRAME_SUFFIX } from './Connection.js';
+import { queueMicrotask } from './Utils.js';
 
 /** 
  * Class that will handle the connection from a content script to the background script
@@ -94,14 +95,18 @@ class BackgroundScript extends CustomEventTarget {
         this.connection = new Connection(port, this.exposedData);
         
         this.connection.addListener("disconnect", () => {
+            console.log("Disconnected (fired from connection event)");
             this.disconnectBackgroundScript();
         });
 
         window.addEventListener("beforeunload", () => {
+            console.log("Disconnected (beforeunload event)");
             this.disconnectBackgroundScript();
         });
 
-        this.fireEvent("connected", {});
+        queueMicrotask(() => {
+            this.fireEvent("connected", {});
+        });
     }
 
     /**

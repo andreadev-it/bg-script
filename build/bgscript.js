@@ -90,7 +90,8 @@ class BackgroundHandler extends _CustomEventTarget.default {
 
     this.fireEvent("connectionreceived", {
       scriptId: name,
-      tabId
+      tabId,
+      frameSrc
     });
   }
   /**
@@ -338,6 +339,8 @@ var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"
 
 var _Connection = require("./Connection.js");
 
+var _Utils = require("./Utils.js");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /** 
@@ -431,12 +434,16 @@ class BackgroundScript extends _CustomEventTarget.default {
     });
     this.connection = new _Connection.Connection(port, this.exposedData);
     this.connection.addListener("disconnect", () => {
+      console.log("Disconnected (fired from connection event)");
       this.disconnectBackgroundScript();
     });
     window.addEventListener("beforeunload", () => {
+      console.log("Disconnected (beforeunload event)");
       this.disconnectBackgroundScript();
     });
-    this.fireEvent("connected", {});
+    (0, _Utils.queueMicrotask)(() => {
+      this.fireEvent("connected", {});
+    });
   }
   /**
    * Function to disconnect this script
@@ -487,7 +494,7 @@ class BackgroundScript extends _CustomEventTarget.default {
 var _default = BackgroundScript;
 exports.default = _default;
 
-},{"./Connection.js":4,"./CustomEventTarget.js":5}],4:[function(require,module,exports){
+},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Utils.js":7}],4:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1059,5 +1066,35 @@ const BgHandlerErrors = {
   NO_CONNECTION: new Error('NO_CONNECTION', (scriptId, tabId) => `There is no connection assigned to id '${scriptId}'${tabId ? ` connected to the tab ${tabId}` : ''}.`)
 };
 exports.BgHandlerErrors = BgHandlerErrors;
+
+},{}],7:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.queueTask = exports.queueMicrotask = void 0;
+
+const queueMicrotask = callback => {
+  if (globalThis.queueMicrotask) {
+    globalThis.queueMicrotask(callback);
+    return;
+  }
+
+  if (Promise !== undefined) {
+    Promise.resolve().then(callback);
+    return;
+  }
+
+  throw "This browser does not support adding microtasks";
+};
+
+exports.queueMicrotask = queueMicrotask;
+
+const queueTask = callback => {
+  setTimeout(callback);
+};
+
+exports.queueTask = queueTask;
 
 },{}]},{},[1]);

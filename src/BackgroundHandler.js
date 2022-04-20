@@ -62,7 +62,8 @@ class BackgroundHandler extends CustomEventTarget {
         // Fire the connection event
         this.fireEvent("connectionreceived", {
             scriptId: name,
-            tabId
+            tabId,
+            frameSrc
         });
     }
 
