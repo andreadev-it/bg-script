@@ -8,8 +8,8 @@ var _BackgroundScript = _interopRequireDefault(require("./src/BackgroundScript.j
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 // Makes these classes globally available 
-window.BackgroundHandler = _BackgroundHandler.default;
-window.BackgroundScript = _BackgroundScript.default;
+globalThis.BackgroundHandler = _BackgroundHandler.default;
+globalThis.BackgroundScript = _BackgroundScript.default;
 
 },{"./src/BackgroundHandler.js":2,"./src/BackgroundScript.js":3}],2:[function(require,module,exports){
 "use strict";
