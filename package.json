@@ -31,5 +31,6 @@
     "gulp": "^4.0.2",
     "vinyl-source-stream": "^2.0.0"
   },
+  "type": "module",
   "dependencies": {}
 }

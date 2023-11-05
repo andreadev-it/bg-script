@@ -1,6 +1,6 @@
 import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
-import { BgHandlerErrors as ERRORS, Error } from './Errors';
+import { BgHandlerErrors as ERRORS, Error } from './Errors.js';
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
@@ -15,16 +15,17 @@ class BackgroundHandler extends CustomEventTarget {
      * Creates a new Background Handler and starts listening to new connections.
      * 
      * @param {object} exposedData An object containing all properties and methods to be exposed to the content scripts
-     * @param {object} options Currently unused. An object that will customize how this class works.
+     * @param {object} options An object that will customize how this class works.
      */
-    constructor(exposedData = {}, options = {}) {
+    constructor(exposedData = {}, options = { runtime: chrome.runtime }) {
         super();
         
         this.scriptConnections = new Map(); // script-id --> connection
         this.exposedData = exposedData;
         this.errorCallback = options.errorCallback ?? null;
+        this.runtime = options.runtime ?? chrome.runtime;
 
-        chrome.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
+        this.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
     }
 
     /**
@@ -51,6 +52,8 @@ class BackgroundHandler extends CustomEventTarget {
 
         let connection = new Connection(port, this.exposedData, connectionOptions);
 
+        // TODO: Check if I have to set the script connection to null on this event
+        // see BackgroundScript.js:68
         connection.addListener("disconnect", () => this.disconnectScript(name, tabId) );
 
         this.scriptConnections.set(scriptId, connection);
@@ -95,7 +98,7 @@ class BackgroundHandler extends CustomEventTarget {
         }
         else {
             scriptId = port.name.substr(CONNECTION_PREFIX.length);
-            tabId = port.sender.tab.id;
+            tabId = port?.sender?.tab?.id;
         }
 
         completeScriptId = this.generateScriptId(scriptId, tabId);

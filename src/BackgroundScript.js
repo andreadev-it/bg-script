@@ -22,13 +22,14 @@ class BackgroundScript extends CustomEventTarget {
      *                                     "devtools" - To be used in scripts that run from the devtools.
      *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
      */
-    constructor(scriptId, exposedData = {}, options = { context: "content" }) {
+    constructor(scriptId, exposedData = {}, options = { context: "content", runtime: chrome.runtime }) {
         super();
 
         this.scriptId = scriptId ?? this._uuidv4();
         this.connection = null;
         this.exposedData = exposedData;
         this.context = options.context ?? "content";
+        this.runtime = options.runtime ?? chrome.runtime;
 
         this.connectBackgroundScript();
     }
@@ -53,7 +54,7 @@ class BackgroundScript extends CustomEventTarget {
                 break;
         }
 
-        let port = chrome.runtime.connect(
+        let port = this.runtime.connect(
             {
                 name: completeScriptId
             }
@@ -62,6 +63,9 @@ class BackgroundScript extends CustomEventTarget {
         this.connection = new Connection(port, this.exposedData);
         
         this.connection.addListener("disconnect", () => {
+            // TODO: Check if I should set the connection to null to avoid
+            // wrong call to port.disconnect in the next function
+            this.connection = null;
             this.disconnectBackgroundScript();
         });
 

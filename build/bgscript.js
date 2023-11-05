@@ -23,7 +23,7 @@ var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"
 
 var _Connection = require("./Connection.js");
 
-var _Errors = require("./Errors");
+var _Errors = require("./Errors.js");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -39,17 +39,20 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * Creates a new Background Handler and starts listening to new connections.
    * 
    * @param {object} exposedData An object containing all properties and methods to be exposed to the content scripts
-   * @param {object} options Currently unused. An object that will customize how this class works.
+   * @param {object} options An object that will customize how this class works.
    */
-  constructor(exposedData = {}, options = {}) {
-    var _options$errorCallbac;
+  constructor(exposedData = {}, options = {
+    runtime: chrome.runtime
+  }) {
+    var _options$errorCallbac, _options$runtime;
 
     super();
     this.scriptConnections = new Map(); // script-id --> connection
 
     this.exposedData = exposedData;
     this.errorCallback = (_options$errorCallbac = options.errorCallback) !== null && _options$errorCallbac !== void 0 ? _options$errorCallbac : null;
-    chrome.runtime.onConnect.addListener(port => this.handleNewConnection(port));
+    this.runtime = (_options$runtime = options.runtime) !== null && _options$runtime !== void 0 ? _options$runtime : chrome.runtime;
+    this.runtime.onConnect.addListener(port => this.handleNewConnection(port));
   }
   /**
    * Handle a new incoming connection
@@ -75,7 +78,9 @@ class BackgroundHandler extends _CustomEventTarget.default {
     let connectionOptions = {
       hasTabId: false
     };
-    let connection = new _Connection.Connection(port, this.exposedData, connectionOptions);
+    let connection = new _Connection.Connection(port, this.exposedData, connectionOptions); // TODO: Check if I have to set the script connection to null on this event
+    // see BackgroundScript.js:68
+
     connection.addListener("disconnect", () => this.disconnectScript(name, tabId));
     this.scriptConnections.set(scriptId, connection); // Fire the connection event
 
@@ -118,8 +123,10 @@ class BackgroundHandler extends _CustomEventTarget.default {
     if (this.isTabAgnostic(port)) {
       scriptId = port.name.substr(_Connection.CONNECTION_PREFIX_NOTAB.length);
     } else {
+      var _port$sender2, _port$sender2$tab;
+
       scriptId = port.name.substr(_Connection.CONNECTION_PREFIX.length);
-      tabId = port.sender.tab.id;
+      tabId = port === null || port === void 0 ? void 0 : (_port$sender2 = port.sender) === null || _port$sender2 === void 0 ? void 0 : (_port$sender2$tab = _port$sender2.tab) === null || _port$sender2$tab === void 0 ? void 0 : _port$sender2$tab.id;
     }
 
     completeScriptId = this.generateScriptId(scriptId, tabId);
@@ -229,7 +236,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
 var _default = BackgroundHandler;
 exports.default = _default;
 
-},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Errors":6}],3:[function(require,module,exports){
+},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Errors.js":6}],3:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -264,15 +271,17 @@ class BackgroundScript extends _CustomEventTarget.default {
    *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
    */
   constructor(scriptId, exposedData = {}, options = {
-    context: "content"
+    context: "content",
+    runtime: chrome.runtime
   }) {
-    var _options$context;
+    var _options$context, _options$runtime;
 
     super();
     this.scriptId = scriptId !== null && scriptId !== void 0 ? scriptId : this._uuidv4();
     this.connection = null;
     this.exposedData = exposedData;
     this.context = (_options$context = options.context) !== null && _options$context !== void 0 ? _options$context : "content";
+    this.runtime = (_options$runtime = options.runtime) !== null && _options$runtime !== void 0 ? _options$runtime : chrome.runtime;
     this.connectBackgroundScript();
   }
   /**
@@ -298,11 +307,14 @@ class BackgroundScript extends _CustomEventTarget.default {
         break;
     }
 
-    let port = chrome.runtime.connect({
+    let port = this.runtime.connect({
       name: completeScriptId
     });
     this.connection = new _Connection.Connection(port, this.exposedData);
     this.connection.addListener("disconnect", () => {
+      // TODO: Check if I should set the connection to null to avoid
+      // wrong call to port.disconnect in the next function
+      this.connection = null;
       this.disconnectBackgroundScript();
     });
     window.addEventListener("beforeunload", () => {
@@ -433,10 +445,11 @@ class Connection extends _CustomEventTarget.default {
     this.waitingRequests = new Map();
     this.nextRequestId = 1;
     this.RESTRICTED_NAMES = ["then", "$getMyTabId"];
-    this.exposedMethods = {};
-    this.exposedProps = {};
+    this.exposedData = exposedData;
+    this.exposedMethods = new Set();
+    this.exposedProps = new Set();
     this.remoteMethods = [];
-    this.parseExposedData(exposedData);
+    this.parseExposedData();
     this.port.onMessage.addListener(message => this.handleMessage(message));
     this.port.onDisconnect.addListener(() => {
       this.fireEvent("disconnect");
@@ -449,18 +462,18 @@ class Connection extends _CustomEventTarget.default {
    */
 
 
-  parseExposedData(data) {
+  parseExposedData() {
     // Split the exposed data between functions and properties, for easier access
-    for (let [key, value] of Object.entries(data)) {
+    for (let [key, value] of Object.entries(this.exposedData)) {
       if (this.RESTRICTED_NAMES.includes(key)) {
         console.warn(`'${key}' is a restricted property name and will be ignored.`);
         continue;
       }
 
       if (typeof value === "function") {
-        this.exposedMethods[key] = value;
+        this.exposedMethods.add(key);
       } else {
-        this.exposedProps[key] = value;
+        this.exposedProps.add(key);
       }
     }
   }
@@ -474,7 +487,7 @@ class Connection extends _CustomEventTarget.default {
   initConnection(callback) {
     let request = {
       type: MESSAGE_TYPES.BOOTSTRAP,
-      exposedMethods: Object.keys(this.exposedMethods)
+      exposedMethods: [...this.exposedMethods.values()]
     };
 
     this._sendMessage(request, callback);
@@ -538,7 +551,7 @@ class Connection extends _CustomEventTarget.default {
         return {
           type: MESSAGE_TYPES.BOOTSTRAPANSWER,
           id: message.id,
-          exposedMethods: Object.keys(this.exposedMethods)
+          exposedMethods: [...this.exposedMethods.values()]
         };
 
       case MESSAGE_TYPES.BOOTSTRAPANSWER:
@@ -555,10 +568,16 @@ class Connection extends _CustomEventTarget.default {
         };
 
       case MESSAGE_TYPES.GET:
+        let result = undefined;
+
+        if (this.exposedProps.has(message.prop)) {
+          result = this.exposedData[message.prop];
+        }
+
         return {
           type: MESSAGE_TYPES.ANSWER,
           id: message.id,
-          result: this.exposedProps[message.prop]
+          result
         };
 
       case MESSAGE_TYPES.SET:
@@ -568,14 +587,14 @@ class Connection extends _CustomEventTarget.default {
           result: undefined
         };
 
-        if (message.prop in this.exposedProps) {
-          res.result = this.exposedProps[message.prop] = message.value;
+        if (this.exposedProps.has(message.prop)) {
+          res.result = this.exposedData[message.prop] = message.value;
         }
 
         return res;
 
       case MESSAGE_TYPES.CALL:
-        if (!message.name in this.exposedMethods) {
+        if (!this.exposedMethods.has(message.name)) {
           return {
             type: MESSAGE_TYPES.ANSWER,
             id: message.id,
@@ -583,7 +602,7 @@ class Connection extends _CustomEventTarget.default {
           };
         }
 
-        this._promisify(this.exposedMethods[message.name], message.args).then(result => this.sendCallResult(message.id, result)).catch(error => {
+        this._promisify(this.exposedData[message.name], message.args).then(result => this.sendCallResult(message.id, result)).catch(error => {
           console.error(error); // Allows to see the problem within the throwing script too
 
           this.sendCallError(message.id, error);
@@ -741,7 +760,9 @@ class Connection extends _CustomEventTarget.default {
 
 
   getRequestCallback(id) {
-    return this.waitingRequests.get(id);
+    let cb = this.waitingRequests.get(id);
+    this.waitingRequests.delete(id);
+    return cb;
   }
   /**
    * Queue a callback that will be fired when the remote action is completed and an answer is received.

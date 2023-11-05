@@ -52,12 +52,13 @@ export class Connection extends CustomEventTarget {
         this.nextRequestId = 1;
         
         this.RESTRICTED_NAMES = ["then", "$getMyTabId"];
-        this.exposedMethods = {};
-        this.exposedProps = {};
+        this.exposedData = exposedData;
+        this.exposedMethods = new Set();
+        this.exposedProps = new Set();
         this.remoteMethods = [];
 
 
-        this.parseExposedData(exposedData);
+        this.parseExposedData();
 
         this.port.onMessage.addListener( (message) => this.handleMessage(message) );
 
@@ -71,9 +72,9 @@ export class Connection extends CustomEventTarget {
      * 
      * @param {Object} data 
      */
-    parseExposedData(data) {
+    parseExposedData() {
         // Split the exposed data between functions and properties, for easier access
-        for (let [key, value] of Object.entries(data)) {
+        for (let [key, value] of Object.entries(this.exposedData)) {
 
             if (this.RESTRICTED_NAMES.includes(key)) {
                 console.warn(`'${key}' is a restricted property name and will be ignored.`);
@@ -81,10 +82,10 @@ export class Connection extends CustomEventTarget {
             }
 
             if (typeof value === "function") {
-                this.exposedMethods[key] = value;
+                this.exposedMethods.add(key);
             }
             else {
-                this.exposedProps[key] = value;
+                this.exposedProps.add(key);
             }
         }
     }
@@ -97,7 +98,7 @@ export class Connection extends CustomEventTarget {
     initConnection(callback) {
         let request = {
             type: MESSAGE_TYPES.BOOTSTRAP,
-            exposedMethods: Object.keys(this.exposedMethods)
+            exposedMethods: [...this.exposedMethods.values()]
         }
 
         this._sendMessage(request, callback);
@@ -160,7 +161,7 @@ export class Connection extends CustomEventTarget {
                 return {
                     type: MESSAGE_TYPES.BOOTSTRAPANSWER,
                     id: message.id,
-                    exposedMethods: Object.keys(this.exposedMethods)
+                    exposedMethods: [...this.exposedMethods.values()]
                 };
             
             case MESSAGE_TYPES.BOOTSTRAPANSWER:
@@ -179,10 +180,16 @@ export class Connection extends CustomEventTarget {
                 }
 
             case MESSAGE_TYPES.GET:
+                let result = undefined;
+
+                if (this.exposedProps.has(message.prop)) {
+                    result = this.exposedData[message.prop];
+                }
+
                 return {
                     type: MESSAGE_TYPES.ANSWER,
                     id: message.id,
-                    result: this.exposedProps[message.prop]
+                    result
                 };
 
             case MESSAGE_TYPES.SET:
@@ -192,14 +199,14 @@ export class Connection extends CustomEventTarget {
                     result: undefined,
                 };
 
-                if (message.prop in this.exposedProps) {
-                    res.result = this.exposedProps[message.prop] = message.value;
+                if (this.exposedProps.has(message.prop)) {
+                    res.result = this.exposedData[message.prop] = message.value;
                 }
                 
                 return res;
             
             case MESSAGE_TYPES.CALL:
-                if (!message.name in this.exposedMethods) {
+                if (!this.exposedMethods.has(message.name)) {
                     return {
                         type: MESSAGE_TYPES.ANSWER,
                         id: message.id,
@@ -207,7 +214,7 @@ export class Connection extends CustomEventTarget {
                     };
                 }
 
-                this._promisify( this.exposedMethods[message.name], message.args )
+                this._promisify( this.exposedData[message.name], message.args )
                     .then(
                         (result) => this.sendCallResult(message.id, result)
                     ).catch(
@@ -372,7 +379,9 @@ export class Connection extends CustomEventTarget {
      * @return {function} The callback
      */
     getRequestCallback(id) {
-        return this.waitingRequests.get(id);
+        let cb = this.waitingRequests.get(id);
+        this.waitingRequests.delete(id);
+        return cb;
     }
 
     /**

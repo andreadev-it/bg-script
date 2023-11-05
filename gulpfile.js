@@ -1,6 +1,10 @@
-var browserify = require('browserify');
-var gulp = require('gulp');
-var source = require('vinyl-source-stream');
+// var browserify = require('browserify');
+// var gulp = require('gulp');
+// var source = require('vinyl-source-stream');
+import browserify from "browserify";
+import gulp from "gulp";
+import source from "vinyl-source-stream";
+
 
 gulp.task('build', function () {
 
