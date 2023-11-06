@@ -1,6 +1,6 @@
 {
   "name": "@andreadev/bg-script",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Library that helps you communicate between background and content scripts in a Google Chrome extension.",
   "main": "index.js",
   "module": "index-modules.js",
@@ -31,6 +31,5 @@
     "gulp": "^4.0.2",
     "vinyl-source-stream": "^2.0.0"
   },
-  "type": "module",
-  "dependencies": {}
+  "type": "module"
 }
