@@ -146,7 +146,7 @@ export class Connection extends CustomEventTarget {
     }
 
     /**
-     * Decides how to answer based on the incomin message type.
+     * Decides how to answer based on the incoming message type.
      * 
      * @param {Object} message The incoming message
      */

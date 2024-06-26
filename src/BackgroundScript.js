@@ -32,6 +32,8 @@ class BackgroundScript extends CustomEventTarget {
         this.runtime = options.runtime ?? chrome.runtime;
 
         this.connectBackgroundScript();
+
+        this.checkForReconnection();
     }
 
     /**
@@ -102,6 +104,21 @@ class BackgroundScript extends CustomEventTarget {
 
         let proxy = await this.connection.getProxy();
         return proxy;
+    }
+    
+    /**
+     * Check if the background script is pinging us
+     */
+    checkForReconnection() {
+        this.runtime.onMessage.addListener(async (req, sender, sendResponse) => {
+            if (this.connection != null) return;
+
+            if (req.type == CONNECTION_PREFIX + "ping") {
+                if (req.scriptId == this.scriptId) {
+                    this.connectBackgroundScript();
+                }
+            }
+        });
     }
 
     /**

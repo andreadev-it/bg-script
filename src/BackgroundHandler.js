@@ -2,6 +2,8 @@ import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors.js';
 
+const STORED_CONNECTIONS_KEY = "bgscript.connections";
+
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  */
@@ -13,7 +15,7 @@ class BackgroundHandler extends CustomEventTarget {
      * @param {object} exposedData An object containing all properties and methods to be exposed to the content scripts
      * @param {object} options An object that will customize how this class works.
      */
-    constructor(exposedData = {}, options = { runtime: chrome.runtime }) {
+    constructor(exposedData = {}, options = {}) {
         super();
         
         /** @type {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object. */
@@ -26,7 +28,37 @@ class BackgroundHandler extends CustomEventTarget {
         /** @property {chrome.runtime} runtime The runtime that will be used to create the connections. */
         this.runtime = options.runtime ?? chrome.runtime;
 
+        this.storage = options.storage ?? chrome.storage;
+        this.chromeTabs = options.chromeTabs ?? chrome.tabs;
+
         this.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
+
+        this.restoreConnections();
+    }
+
+    async restoreConnections() {
+        let data = await this.storage.local.get(STORED_CONNECTIONS_KEY);
+        
+        if (data[STORED_CONNECTIONS_KEY]) {
+            let connections = data[STORED_CONNECTIONS_KEY];
+
+            for (let [scriptId, tab] of connections) {
+                this.chromeTabs.sendMessage(tab, { 
+                    type: CONNECTION_PREFIX + "ping",
+                    scriptId
+                });
+            }
+        }
+    }
+
+    async saveConnections() {
+        let conns = [];
+        for (let [scriptId, _] of this.scriptConnections) {
+            let [name, tabId] = scriptId.split("-");
+            conns.push([name, parseInt(tabId)]);
+        }
+
+        await this.storage.local.set({ [STORED_CONNECTIONS_KEY]: conns });
     }
 
     /**
@@ -34,7 +66,7 @@ class BackgroundHandler extends CustomEventTarget {
      * 
      * @param {chrome.runtime.Port} port The newly created connection to a content script
      */
-    handleNewConnection(port) {
+    async handleNewConnection(port) {
 
         if (!this.isInternalConnection(port)) return;
 
@@ -58,6 +90,7 @@ class BackgroundHandler extends CustomEventTarget {
         connection.addListener("disconnect", () => this.disconnectScript(name, tabId) );
 
         this.scriptConnections.set(scriptId, connection);
+        await this.saveConnections();
 
         // Fire the connection event
         this.fireEvent("connectionreceived", {

@@ -4,6 +4,7 @@ import { MockedEvent } from "./mockedEvent.js";
 export class MockedChromeRuntime {
     constructor(fixedTabId = null) {
         this.onConnect = new MockedEvent();
+        this.onMessage = new MockedEvent();
         this.fixedTabId = fixedTabId;
     }
 

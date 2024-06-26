@@ -19,12 +19,10 @@ var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"
 var _Connection = require("./Connection.js");
 var _Errors = require("./Errors.js");
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+const STORED_CONNECTIONS_KEY = "bgscript.connections";
+
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
- * 
- * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
- * @property {object} exposedData The properties and methods exposed to the connecting scripts.
- * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
 class BackgroundHandler extends _CustomEventTarget.default {
   /**
@@ -33,16 +31,45 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * @param {object} exposedData An object containing all properties and methods to be exposed to the content scripts
    * @param {object} options An object that will customize how this class works.
    */
-  constructor(exposedData = {}, options = {
-    runtime: chrome.runtime
-  }) {
-    var _options$errorCallbac, _options$runtime;
+  constructor(exposedData = {}, options = {}) {
+    var _options$errorCallbac, _options$runtime, _options$storage, _options$chromeTabs;
     super();
+
+    /** @type {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object. */
     this.scriptConnections = new Map(); // script-id --> connection
+    /** @property {object} exposedData The properties and methods exposed to the connecting scripts. */
     this.exposedData = exposedData;
+    /** @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error. */
     this.errorCallback = (_options$errorCallbac = options.errorCallback) !== null && _options$errorCallbac !== void 0 ? _options$errorCallbac : null;
+
+    /** @property {chrome.runtime} runtime The runtime that will be used to create the connections. */
     this.runtime = (_options$runtime = options.runtime) !== null && _options$runtime !== void 0 ? _options$runtime : chrome.runtime;
+    this.storage = (_options$storage = options.storage) !== null && _options$storage !== void 0 ? _options$storage : chrome.storage;
+    this.chromeTabs = (_options$chromeTabs = options.chromeTabs) !== null && _options$chromeTabs !== void 0 ? _options$chromeTabs : chrome.tabs;
     this.runtime.onConnect.addListener(port => this.handleNewConnection(port));
+    this.restoreConnections();
+  }
+  async restoreConnections() {
+    let data = await this.storage.local.get(STORED_CONNECTIONS_KEY);
+    if (data[STORED_CONNECTIONS_KEY]) {
+      let connections = data[STORED_CONNECTIONS_KEY];
+      for (let [scriptId, tab] of connections) {
+        this.chromeTabs.sendMessage(tab, {
+          type: _Connection.CONNECTION_PREFIX + "ping",
+          scriptId
+        });
+      }
+    }
+  }
+  async saveConnections() {
+    let conns = [];
+    for (let [scriptId, _] of this.scriptConnections) {
+      let [name, tabId] = scriptId.split("-");
+      conns.push([name, parseInt(tabId)]);
+    }
+    await this.storage.local.set({
+      [STORED_CONNECTIONS_KEY]: conns
+    });
   }
 
   /**
@@ -50,7 +77,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * 
    * @param {chrome.runtime.Port} port The newly created connection to a content script
    */
-  handleNewConnection(port) {
+  async handleNewConnection(port) {
     var _port$sender$tab$id, _port$sender;
     if (!this.isInternalConnection(port)) return;
     let [name, scriptId] = this.parsePortName(port);
@@ -73,6 +100,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
     // see BackgroundScript.js:68
     connection.addListener("disconnect", () => this.disconnectScript(name, tabId));
     this.scriptConnections.set(scriptId, connection);
+    await this.saveConnections();
 
     // Fire the connection event
     this.fireEvent("connectionreceived", {
@@ -177,6 +205,25 @@ class BackgroundHandler extends _CustomEventTarget.default {
   }
 
   /**
+   * Get all tab ids where a specific scriptId is present.
+   *
+   * @param {string} scriptId
+   * @returns {number[]} The tab IDs
+   */
+  getScriptTabs(scriptId) {
+    let tabs = [];
+    for (let [id, connection] of this.scriptConnections) {
+      if (id.startsWith(scriptId)) {
+        var _connection$port$send;
+        if ((_connection$port$send = connection.port.sender) !== null && _connection$port$send !== void 0 && (_connection$port$send = _connection$port$send.tab) !== null && _connection$port$send !== void 0 && _connection$port$send.id) {
+          tabs.push(connection.port.sender.tab.id);
+        }
+      }
+    }
+    return tabs;
+  }
+
+  /**
    * Check if a script with a specific id associated to a specific tab has made a connection to the background page.
    * 
    * @param {string} scriptId 
@@ -251,6 +298,7 @@ class BackgroundScript extends _CustomEventTarget.default {
     this.context = (_options$context = options.context) !== null && _options$context !== void 0 ? _options$context : "content";
     this.runtime = (_options$runtime = options.runtime) !== null && _options$runtime !== void 0 ? _options$runtime : chrome.runtime;
     this.connectBackgroundScript();
+    this.checkForReconnection();
   }
 
   /**
@@ -309,6 +357,20 @@ class BackgroundScript extends _CustomEventTarget.default {
     }
     let proxy = await this.connection.getProxy();
     return proxy;
+  }
+
+  /**
+   * Check if the background script is pinging us
+   */
+  checkForReconnection() {
+    this.runtime.onMessage.addListener(async (req, sender, sendResponse) => {
+      if (this.connection != null) return;
+      if (req.type == _Connection.CONNECTION_PREFIX + "ping") {
+        if (req.scriptId == this.scriptId) {
+          this.connectBackgroundScript();
+        }
+      }
+    });
   }
 
   /**
@@ -474,7 +536,7 @@ class Connection extends _CustomEventTarget.default {
   }
 
   /**
-   * Decides how to answer based on the incomin message type.
+   * Decides how to answer based on the incoming message type.
    * 
    * @param {Object} message The incoming message
    */

@@ -5,19 +5,22 @@ import { MockedWindow } from "./mocks/mockedWindow.js";
 import BackgroundHandler from "../src/BackgroundHandler.js";
 import BackgroundScript from "../src/BackgroundScript.js";
 import { waitFor, setupScripts } from "./utilities.js";
+import { MockedChromeStorage } from "./mocks/mockedChromeStorage.js";
 
 global.window = new MockedWindow();
 
 describe("The Background Handler", () => {
     test("should be constructed correctly", () => {
         let runtime = new MockedChromeRuntime();
+        let storage = new MockedChromeStorage();
+        let chromeTabs = {};
 
         const foo = () => {};
         const exposed = {
             foo,
             prop: 1
         };
-        let bgHandler = new BackgroundHandler(exposed, { runtime });
+        let bgHandler = new BackgroundHandler(exposed, { runtime, storage, chromeTabs });
 
         assert.deepEqual(bgHandler.exposedData, { foo, prop: 1});
         assert.equal(bgHandler.scriptConnections.size, 0);
