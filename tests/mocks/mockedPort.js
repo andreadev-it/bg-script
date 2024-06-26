@@ -1,11 +1,16 @@
 import { MockedEvent } from "./mockedEvent.js";
 
 export class MockedPort {
-    constructor(name) {
+    constructor(name, tabId) {
         this.name = name;
         this.onMessage = new MockedEvent();
         this.onDisconnect = new MockedEvent();
         this.other = null;
+        this.sender = {
+            tab: {
+                id: tabId ?? crypto.randomUUID()
+            }
+        }
     }
 
     _join(port) {
@@ -22,9 +27,9 @@ export class MockedPort {
     }
 }
 
-export const getMockedPortPair = (name) => {
-    let portA = new MockedPort(name);
-    let portB = new MockedPort(name);
+export const getMockedPortPair = (name, tabId = null) => {
+    let portA = new MockedPort(name, tabId);
+    let portB = new MockedPort(name, tabId);
     portA._join(portB);
     portB._join(portA);
     return [portA, portB];

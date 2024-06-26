@@ -28,7 +28,11 @@ describe("The Background Handler", () => {
 
         await waitFor(100);
 
-        assert.ok(bgHandler.scriptConnections.has(bgScript.scriptId));
+        /** @type {string[]} */
+        let scriptIds = [...bgHandler.scriptConnections.keys()];
+
+        assert.equal(scriptIds.length, 1);
+        assert.ok(scriptIds[0].startsWith(bgScript.scriptId));
     });
 
     test("should allow functions to be executed remotely", async () => {
@@ -116,7 +120,7 @@ describe("The Background Script should", () => {
         let [bgHandler, [bgScript, otherScript]] = setupScripts({}, [
             { name: "test", exposed: {} },
             { name: "test", exposed: {} }
-        ]);
+        ], 1);
 
         let cb = mock.fn();
 
@@ -148,5 +152,24 @@ describe("The Background Script should", () => {
 
         // just reset the value for next tests
         global.window = new MockedWindow();
+    });
+});
+
+describe("The Background Handler should", () => {
+    test("be able to show the tabs to which a script is connected", async () => {
+        let [bgHandler, [bgScript, otherScript, thirdScript]] = setupScripts({}, [
+            { name: "test", exposed: {} },
+            { name: "other", exposed: {} }
+        ]);
+
+        await waitFor(50);
+
+        let tabs = bgHandler.getScriptTabs("test");
+
+        assert.equal(tabs.length, 1);
+
+        tabs = bgHandler.getScriptTabs("other");
+
+        assert.equal(tabs.length, 1);
     });
 })

@@ -8,8 +8,8 @@ export function waitFor(ms) {
     });
 }
 
-export function setupScripts(handlerData, scriptsData) {
-    let runtime = new MockedChromeRuntime();
+export function setupScripts(handlerData, scriptsData, fixedTabId = null) {
+    let runtime = new MockedChromeRuntime(fixedTabId);
     let bgHandler = new BackgroundHandler(handlerData, { runtime });
     
     let scripts = [];

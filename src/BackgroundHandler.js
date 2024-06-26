@@ -4,10 +4,6 @@ import { BgHandlerErrors as ERRORS, Error } from './Errors.js';
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
- * 
- * @property {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object.
- * @property {object} exposedData The properties and methods exposed to the connecting scripts.
- * @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error.
  */
 class BackgroundHandler extends CustomEventTarget {
 
@@ -20,9 +16,14 @@ class BackgroundHandler extends CustomEventTarget {
     constructor(exposedData = {}, options = { runtime: chrome.runtime }) {
         super();
         
+        /** @type {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object. */
         this.scriptConnections = new Map(); // script-id --> connection
+        /** @property {object} exposedData The properties and methods exposed to the connecting scripts. */
         this.exposedData = exposedData;
+        /** @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error. */
         this.errorCallback = options.errorCallback ?? null;
+
+        /** @property {chrome.runtime} runtime The runtime that will be used to create the connections. */
         this.runtime = options.runtime ?? chrome.runtime;
 
         this.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
@@ -168,6 +169,24 @@ class BackgroundHandler extends CustomEventTarget {
         let proxy = await connection.getProxy();
 
         return proxy;
+    }
+
+    /**
+     * Get all tab ids where a specific scriptId is present.
+     *
+     * @param {string} scriptId
+     * @returns {number[]} The tab IDs
+     */
+    getScriptTabs(scriptId) {
+        let tabs = [];
+        for (let [id, connection] of this.scriptConnections) {
+            if (id.startsWith(scriptId)) {
+                if (connection.port.sender?.tab?.id) {
+                    tabs.push(connection.port.sender.tab.id);
+                }
+            }
+        }
+        return tabs;
     }
 
     /**
