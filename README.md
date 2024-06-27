@@ -345,4 +345,4 @@ let tabId = await connection.$getMyTabId();
 
 ## Using the sendMessage API alongside this library
 
-From version 1.1.0, there is no limitation on how to use the "sendMessage" API, since this library is now using long lived connections with ports. If you want to create a separate port to the background script, just avoid to start its name with "bgscript", to ensure that the bgscript library does not mistake it as its private connection.
+From version 1.2.0, there is a very small limitation on how to use the "sendMessage" API, even though this library mostly uses ports. Just avoid having a message that is an object, with a `type` property that starts with "bgscript".
