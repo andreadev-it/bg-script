@@ -1,38 +1,42 @@
-import CustomEventTarget from './CustomEventTarget.js';
+import { CustomEventTarget } from '@andreadev/custom-event-target';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors.js';
-import { waitForNextTask } from './utilities.js';
+import { ChromeTabs, Runtime, Storage, waitForNextTask } from './utilities.js';
 
 const STORED_CONNECTIONS_KEY = "bgscript.connections";
+
+type ErrorData = {
+    errorId: string;
+    error: string;
+};
 
 /** 
  * Class that will handle all the content scripts that will connect to the background script.
  */
 class BackgroundHandler extends CustomEventTarget {
+    public scriptConnections: Map<string, Connection>;
+    public exposedData: any;
+    public errorCallback: (data: ErrorData) => void | null;
+    private runtime: Runtime;
+    private storage: Storage;
+    private chromeTabs: ChromeTabs;
+    private isRestoringConnections: boolean;
 
     /**
      * Creates a new Background Handler and starts listening to new connections.
-     * 
-     * @param {object} exposedData An object containing all properties and methods to be exposed to the content scripts
-     * @param {object} options An object that will customize how this class works.
      */
-    constructor(exposedData = {}, options = {}) {
+    constructor(exposedData: any = {}, options: any = {}) {
         super();
         
-        /** @type {Map<string, Connection>} scriptConnections A Map that will relate every script ID to its Connection object. */
         this.scriptConnections = new Map(); // script-id --> connection
-        /** @property {object} exposedData The properties and methods exposed to the connecting scripts. */
         this.exposedData = exposedData;
-        /** @property {function} errorCallback A callback that gets fired whenever there is an error in the script. It will get passed some details about the error. */
         this.errorCallback = options.errorCallback ?? null;
 
-        /** @property {chrome.runtime} runtime The runtime that will be used to create the connections. */
+        // Useful for mocking tests
         this.runtime = options.runtime ?? chrome.runtime;
-
         this.storage = options.storage ?? chrome.storage;
         this.chromeTabs = options.chromeTabs ?? chrome.tabs;
 
-        /** @property {bool} isRestoringConnections */
         this.isRestoringConnections = false;
 
         this.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
@@ -77,10 +81,8 @@ class BackgroundHandler extends CustomEventTarget {
      * Waits for all connections to be restored. Useful to avoid returning
      * the wrong number of connections from the "getScriptConnection" of
      * "getScriptTabs" functions.
-     *
-     * @returns {Promise<void>} A promise that is resolved when the restoration is finished
      */
-    async waitForRestoration() {
+    async waitForRestoration() : Promise<void> {
         while (this.isRestoringConnections) {
             await waitForNextTask();
         }
@@ -101,10 +103,8 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Handle a new incoming connection
-     * 
-     * @param {chrome.runtime.Port} port The newly created connection to a content script
      */
-    async handleNewConnection(port) {
+    async handleNewConnection(port: chrome.runtime.Port) {
 
         if (!this.isInternalConnection(port)) return;
 
@@ -139,38 +139,34 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Checks if the connection was initialized from this library
-     * 
-     * @param {chrome.runtime.Port} port The connection 
      */
-    isInternalConnection(port) {
+    isInternalConnection(port: chrome.runtime.Port) {
         return port.name.startsWith(CONNECTION_PREFIX) ||
                port.name.startsWith(CONNECTION_PREFIX_NOTAB);
     }
 
     /**
      * Check if the connection should not be related to any chrome tab
-     * 
-     * @param {chrome.runtime.Port} port The connection
      */
-    isTabAgnostic(port) {
+    isTabAgnostic(port: chrome.runtime.Port) {
         return port.name.startsWith(CONNECTION_PREFIX_NOTAB);
     }
 
     /**
      * Parse the port name and extracts a unique identifier (the script id).
-     * 
-     * @param {chrome.runtime.Port} port The connection
-     * @returns {string} The script id
+     * @returns The script id as was set in the content script, and the complete id
      */
-    parsePortName(port) {
-        let scriptId, tabId, completeScriptId;
+    parsePortName(port: chrome.runtime.Port) : [string, string] {
+        let scriptId: string;
+        let tabId = null;
+        let completeScriptId: string;
 
         if (this.isTabAgnostic(port)) {
             scriptId = port.name.substr(CONNECTION_PREFIX_NOTAB.length);
         }
         else {
             scriptId = port.name.substr(CONNECTION_PREFIX.length);
-            tabId = port?.sender?.tab?.id;
+            tabId = port?.sender?.tab?.id ?? null;
         }
 
         completeScriptId = this.generateScriptId(scriptId, tabId);
@@ -180,12 +176,8 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Generate a script id to be used within the connections map
-     * 
-     * @param {string} name 
-     * @param {number} tabId 
-     * @returns {string} The generated script id
      */
-    generateScriptId(name, tabId) {
+    generateScriptId(name: string, tabId: number | null) : string {
         let scriptId = name;
         if (tabId) {
             scriptId += `-${tabId}`;
@@ -195,10 +187,8 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Disconnect a script based on its id 
-     * 
-     * @param {string} id
      */
-    disconnectScript(name, tabId) {
+    disconnectScript(name: string, tabId: number | null) {
         let id = this.generateScriptId(name, tabId);
         let conn = this.scriptConnections.get(id);
 
@@ -218,13 +208,8 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Get the connection to a script based on its id and the chrome tab that it's associated with.
-     * 
-     * @async
-     * @param {string} scriptId The id of the script to which you want to get a connection
-     * @param {string} tabId The id of the chrome tab this scripts relates to
-     * @return {Promise<Proxy>} The connection proxy
      */
-    async getScriptConnection(scriptId, tabId) {
+    async getScriptConnection(scriptId: string, tabId: number) : Promise<ProxyHandler<{}> | null> {
 
         await this.waitForRestoration();
 
@@ -239,18 +224,15 @@ class BackgroundHandler extends CustomEventTarget {
             return null;
         }
 
-        let proxy = await connection.getProxy();
+        let proxy = await connection.getProxy() as ProxyHandler<{}>;
 
         return proxy;
     }
 
     /**
      * Get all tab ids where a specific scriptId is present.
-     *
-     * @param {string} scriptId
-     * @returns {number[]} The tab IDs
      */
-    async getScriptTabs(scriptId) {
+    async getScriptTabs(scriptId: string) : Promise<number[]> {
         await this.waitForRestoration();
 
         let tabs = [];
@@ -266,12 +248,8 @@ class BackgroundHandler extends CustomEventTarget {
 
     /**
      * Check if a script with a specific id associated to a specific tab has made a connection to the background page.
-     * 
-     * @param {string} scriptId 
-     * @param {string} tabId 
-     * @returns Whether the script is connected
      */
-    hasConnectedScript(scriptId, tabId) {
+    hasConnectedScript(scriptId: string, tabId: number) : boolean {
         let specificScriptId = scriptId;
 
         if (tabId) specificScriptId += `-${tabId}`;
@@ -286,7 +264,7 @@ class BackgroundHandler extends CustomEventTarget {
      * @param  {...any} args 
      * @returns 
      */
-    handleError(error, ...args) {
+    handleError(error: Error, ...args: any[]) {
         if (this.errorCallback) {
             this.errorCallback({
                 errorId: error.id,

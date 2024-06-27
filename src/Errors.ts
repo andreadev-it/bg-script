@@ -2,23 +2,16 @@ export class Error {
 
     /**
      * Creates a new Error with a specific id and a function that will return useful informations
-     * 
-     * @constructor
-     * @param {string} id A readable id for the error
-     * @param {function} getTextCallback A function that will return a description text for this error.
      */
-    constructor( id, getTextCallback ) {
-        this.id = id;
-        this.getTextCallback = getTextCallback;
-    }
+    constructor(
+        public id: string, 
+        public getTextCallback: (...args: any[]) => string
+    ) {}
 
     /**
      * Get the error description text
-     * 
-     * @param  {...any} args
-     * @returns {string} The description of this error 
      */
-    getText(...args) {
+    getText(...args: any[]) {
         return this.getTextCallback(...args);
     }
 }

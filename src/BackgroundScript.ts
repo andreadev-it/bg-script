@@ -1,28 +1,35 @@
-import CustomEventTarget from './CustomEventTarget.js';
+import { CustomEventTarget } from '@andreadev/custom-event-target';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
+import { Runtime } from './utilities.js';
 
 /** 
  * Class that will handle the connection from a content script to the background script
  * 
- * @property {string} scriptId A string that uniquely identifies this script file (could be in the context of a chrome tab or globally, depending on the context property).
- * @property {Object} exposedData An object containing all properties and methods to be exposed to the background script.
- * @property {Connection} connection The actual connection object that handles the communications with the background script.
- * @property {string} context The context of this script. 
+ * @property scriptId A string that uniquely identifies this script file (could be in the context of a chrome tab or globally, depending on the context property).
+ * @property exposedData An object containing all properties and methods to be exposed to the background script.
+ * @property connection The actual connection object that handles the communications with the background script.
+ * @property context The context of this script. 
  */
 class BackgroundScript extends CustomEventTarget {
+
+    scriptId: string;
+    exposedData: any;
+    connection: Connection | null;
+    context: string;
+    private runtime: Runtime;
+
 
     /**
      * It creates a new Background Script class and initialize all the class properties. It will also bootstrap the actual connection.
      * 
-     * @param {string} scriptId A unique ID to identify this script
-     * @param {Object} exposedData An object containing all properties and methods to be exposed to the background script
-     * @param {Object} options
-     * @param {string} options.context The context of this content script. It can have three values:
-     *                                     "content" - To be used in content scripts.
-     *                                     "devtools" - To be used in scripts that run from the devtools.
-     *                                     "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
+     * @param scriptId A unique ID to identify this script
+     * @param exposedData An object containing all properties and methods to be exposed to the background script
+     * @param options.context The context of this content script. It can have three values:
+     *                            "content" - To be used in content scripts.
+     *                            "devtools" - To be used in scripts that run from the devtools.
+     *                            "tab-agnostic" - To be used in scripts that are not related to any tab, and are unique in your extension.
      */
-    constructor(scriptId, exposedData = {}, options = { context: "content", runtime: chrome.runtime }) {
+    constructor(scriptId: string, exposedData = {}, options = { context: "content", runtime: chrome.runtime }) {
         super();
 
         this.scriptId = scriptId ?? this._uuidv4();
@@ -92,17 +99,15 @@ class BackgroundScript extends CustomEventTarget {
 
     /**
      * Function to retrieve the connection proxy.
-     * 
-     * @async
-     * @return {Promise<Proxy>}
      */
-    async getConnection() {
+    async getConnection() : Promise<unknown> {
 
-        if (!this.connection) {
+        if (this.connection === null) {
             this.connectBackgroundScript();
         }
 
-        let proxy = await this.connection.getProxy();
+        // Here I use the "!" because I'm sure there will be a connection here
+        let proxy = await this.connection!.getProxy();
         return proxy;
     }
     
@@ -110,7 +115,7 @@ class BackgroundScript extends CustomEventTarget {
      * Check if the background script is pinging us
      */
     checkForReconnection() {
-        this.runtime.onMessage.addListener(async (req, sender, sendResponse) => {
+        this.runtime.onMessage.addListener(async (req, _sender, _sendResponse) => {
             if (this.connection != null) return;
 
             if (req.type == CONNECTION_PREFIX + "ping") {
@@ -123,10 +128,8 @@ class BackgroundScript extends CustomEventTarget {
 
     /**
      * Function that returns a uuid version 4 formatted string.
-     * 
-     * @return {string} the id.
      */
-    _uuidv4() {
+    _uuidv4() : string {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
             var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);

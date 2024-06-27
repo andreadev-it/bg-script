@@ -32,5 +32,9 @@
     "gulp": "^4.0.2",
     "vinyl-source-stream": "^2.0.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@andreadev/custom-event-target": "^1.0.3",
+    "@types/chrome": "^0.0.268"
+  }
 }
