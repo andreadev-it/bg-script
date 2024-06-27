@@ -18,6 +18,7 @@ exports.default = void 0;
 var _CustomEventTarget = _interopRequireDefault(require("./CustomEventTarget.js"));
 var _Connection = require("./Connection.js");
 var _Errors = require("./Errors.js");
+var _utilities = require("./utilities.js");
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 const STORED_CONNECTIONS_KEY = "bgscript.connections";
 
@@ -46,21 +47,58 @@ class BackgroundHandler extends _CustomEventTarget.default {
     this.runtime = (_options$runtime = options.runtime) !== null && _options$runtime !== void 0 ? _options$runtime : chrome.runtime;
     this.storage = (_options$storage = options.storage) !== null && _options$storage !== void 0 ? _options$storage : chrome.storage;
     this.chromeTabs = (_options$chromeTabs = options.chromeTabs) !== null && _options$chromeTabs !== void 0 ? _options$chromeTabs : chrome.tabs;
+
+    /** @property {bool} isRestoringConnections */
+    this.isRestoringConnections = false;
     this.runtime.onConnect.addListener(port => this.handleNewConnection(port));
     this.restoreConnections();
   }
+
+  /**
+   * Restore all the connections that were saved in the storage.
+   */
   async restoreConnections() {
+    console.log("Restoring scripts connections");
+    this.isRestoringConnections = true;
     let data = await this.storage.local.get(STORED_CONNECTIONS_KEY);
+    let connected = [];
     if (data[STORED_CONNECTIONS_KEY]) {
       let connections = data[STORED_CONNECTIONS_KEY];
       for (let [scriptId, tab] of connections) {
-        this.chromeTabs.sendMessage(tab, {
-          type: _Connection.CONNECTION_PREFIX + "ping",
-          scriptId
-        });
+        try {
+          await this.chromeTabs.sendMessage(tab, {
+            type: _Connection.CONNECTION_PREFIX + "ping",
+            scriptId
+          });
+          connected.push([scriptId, tab]);
+        } catch (_unused) {
+          console.log(`Could not connect to tab ${tab}. Skipping.`);
+        }
       }
     }
+    await this.storage.local.set({
+      [STORED_CONNECTIONS_KEY]: connected
+    });
+    this.isRestoringConnections = false;
+    console.log("Finished restoring connections");
   }
+
+  /**
+   * Waits for all connections to be restored. Useful to avoid returning
+   * the wrong number of connections from the "getScriptConnection" of
+   * "getScriptTabs" functions.
+   *
+   * @returns {Promise<void>} A promise that is resolved when the restoration is finished
+   */
+  async waitForRestoration() {
+    while (this.isRestoringConnections) {
+      await (0, _utilities.waitForNextTask)();
+    }
+  }
+
+  /**
+   * Save the current connections in the storage
+   */
   async saveConnections() {
     let conns = [];
     for (let [scriptId, _] of this.scriptConnections) {
@@ -193,6 +231,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * @return {Promise<Proxy>} The connection proxy
    */
   async getScriptConnection(scriptId, tabId) {
+    await this.waitForRestoration();
     let specificScriptId = scriptId;
     if (tabId) specificScriptId += `-${tabId}`;
     let connection = this.scriptConnections.get(specificScriptId);
@@ -210,7 +249,8 @@ class BackgroundHandler extends _CustomEventTarget.default {
    * @param {string} scriptId
    * @returns {number[]} The tab IDs
    */
-  getScriptTabs(scriptId) {
+  async getScriptTabs(scriptId) {
+    await this.waitForRestoration();
     let tabs = [];
     for (let [id, connection] of this.scriptConnections) {
       if (id.startsWith(scriptId)) {
@@ -256,7 +296,7 @@ class BackgroundHandler extends _CustomEventTarget.default {
 }
 var _default = exports.default = BackgroundHandler;
 
-},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Errors.js":6}],3:[function(require,module,exports){
+},{"./Connection.js":4,"./CustomEventTarget.js":5,"./Errors.js":6,"./utilities.js":7}],3:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -870,5 +910,18 @@ const BgHandlerErrors = exports.BgHandlerErrors = {
   ID_TAKEN: new Error('ID_TAKEN', id => `The id '${id}' has already been taken. It must be unique.`),
   NO_CONNECTION: new Error('NO_CONNECTION', (scriptId, tabId) => `There is no connection assigned to id '${scriptId}'${tabId ? ` connected to the tab ${tabId}` : ''}.`)
 };
+
+},{}],7:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.waitForNextTask = waitForNextTask;
+function waitForNextTask() {
+  return new Promise(resolve => {
+    setTimeout(resolve, 0);
+  });
+}
 
 },{}]},{},[1]);

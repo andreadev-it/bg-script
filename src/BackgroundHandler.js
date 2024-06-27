@@ -1,6 +1,7 @@
 import CustomEventTarget from './CustomEventTarget.js';
 import { Connection, CONNECTION_PREFIX, CONNECTION_PREFIX_NOTAB } from './Connection.js';
 import { BgHandlerErrors as ERRORS, Error } from './Errors.js';
+import { waitForNextTask } from './utilities.js';
 
 const STORED_CONNECTIONS_KEY = "bgscript.connections";
 
@@ -31,26 +32,63 @@ class BackgroundHandler extends CustomEventTarget {
         this.storage = options.storage ?? chrome.storage;
         this.chromeTabs = options.chromeTabs ?? chrome.tabs;
 
+        /** @property {bool} isRestoringConnections */
+        this.isRestoringConnections = false;
+
         this.runtime.onConnect.addListener( (port) => this.handleNewConnection(port) );
 
         this.restoreConnections();
     }
 
+    /**
+     * Restore all the connections that were saved in the storage.
+     */
     async restoreConnections() {
+        console.log("Restoring scripts connections");
+        this.isRestoringConnections = true;
+
         let data = await this.storage.local.get(STORED_CONNECTIONS_KEY);
+        let connected = [];
         
         if (data[STORED_CONNECTIONS_KEY]) {
             let connections = data[STORED_CONNECTIONS_KEY];
 
             for (let [scriptId, tab] of connections) {
-                this.chromeTabs.sendMessage(tab, { 
-                    type: CONNECTION_PREFIX + "ping",
-                    scriptId
-                });
+                try {
+                    await this.chromeTabs.sendMessage(tab, { 
+                        type: CONNECTION_PREFIX + "ping",
+                        scriptId
+                    });
+
+                    connected.push([scriptId, tab]);
+                } catch {
+                    console.log(`Could not connect to tab ${tab}. Skipping.`);
+                }
             }
+        }
+
+        await this.storage.local.set({ [STORED_CONNECTIONS_KEY]: connected });
+
+        this.isRestoringConnections = false;
+        console.log("Finished restoring connections");
+    }
+
+    /**
+     * Waits for all connections to be restored. Useful to avoid returning
+     * the wrong number of connections from the "getScriptConnection" of
+     * "getScriptTabs" functions.
+     *
+     * @returns {Promise<void>} A promise that is resolved when the restoration is finished
+     */
+    async waitForRestoration() {
+        while (this.isRestoringConnections) {
+            await waitForNextTask();
         }
     }
 
+    /**
+     * Save the current connections in the storage
+     */
     async saveConnections() {
         let conns = [];
         for (let [scriptId, _] of this.scriptConnections) {
@@ -188,6 +226,8 @@ class BackgroundHandler extends CustomEventTarget {
      */
     async getScriptConnection(scriptId, tabId) {
 
+        await this.waitForRestoration();
+
         let specificScriptId = scriptId;
 
         if (tabId) specificScriptId += `-${tabId}`;
@@ -210,7 +250,9 @@ class BackgroundHandler extends CustomEventTarget {
      * @param {string} scriptId
      * @returns {number[]} The tab IDs
      */
-    getScriptTabs(scriptId) {
+    async getScriptTabs(scriptId) {
+        await this.waitForRestoration();
+
         let tabs = [];
         for (let [id, connection] of this.scriptConnections) {
             if (id.startsWith(scriptId)) {
