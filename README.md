@@ -242,7 +242,7 @@ Note that when you set a variable, the new value will be returned (just like whe
 ## Communicate with the content scripts
 From version 1.1.0, you can do all the aforementioned actions from the background script too!
 
-By default, the scripts are associated with their tab ids. For this reason, you should first know which tab you want to communicate with. If you have this tab id in a variable called "tabId", then you can do the following:
+By default, the scripts are associated with their tab ids. For this reason, you should first know which tab you want to communicate with (you can also request the tabs where a specific script is active, as shown later). If you have this tab id in a variable called "tabId", then you can do the following:
 
 ```js
 // Background script
@@ -268,6 +268,16 @@ var bgScript = new BackgroundScript("script-id", {
 function remoteMethod() {
   return "Method in the content script";
 }
+```
+
+You can also use a method on the BackgroundHandler to request the various tab Ids where a script is connected. This is the way to do it:
+```js
+async function broadcast() {
+  let tabIds = await bgHandler.getScriptTabs("script-id-here");
+  for (let id of tabIds) {
+    // get the connection and call a method
+  } 
+} 
 ```
 
 ## API Reference
